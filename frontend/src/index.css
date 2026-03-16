@@ -1,0 +1,57 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+:root {
+  --cyber-bg-0: #02061a;
+  --cyber-bg-1: #040d2a;
+  --cyber-bg-2: #06183b;
+  --cyber-cyan: #1fd8ff;
+}
+
+body {
+  margin: 0;
+  color: #cfeaff;
+  background:
+    radial-gradient(60% 45% at 50% 20%, rgba(23, 120, 220, 0.2), transparent 75%),
+    radial-gradient(35% 35% at 20% 80%, rgba(31, 216, 255, 0.08), transparent 80%),
+    linear-gradient(180deg, var(--cyber-bg-2) 0%, var(--cyber-bg-1) 45%, var(--cyber-bg-0) 100%);
+}
+
+.cyber-screen {
+  position: relative;
+  isolation: isolate;
+}
+
+.cyber-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(31, 216, 255, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 216, 255, 0.09) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.35));
+}
+
+.cyber-header-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(31, 216, 255, 0.45);
+  border-radius: 10px;
+  padding: 12px 16px;
+  background:
+    linear-gradient(180deg, rgba(12, 50, 102, 0.45), rgba(6, 22, 46, 0.6));
+  box-shadow:
+    inset 0 0 24px rgba(31, 216, 255, 0.08),
+    0 0 24px rgba(31, 216, 255, 0.14);
+}
