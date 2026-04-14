@@ -1,114 +1,122 @@
 from __future__ import annotations
 
-import shutil
+import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.services.loading_service import load_document
-from app.core.config import settings
-from app.core.storage import read_json
+from app.services.loading_service import load_document, load_docs_root_dir
 
 router = APIRouter()
 
 
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _iter_documents() -> list[tuple[Path, dict[str, Any]]]:
+    root = load_docs_root_dir()
+    if not root.exists():
+        return []
+
+    docs: list[tuple[Path, dict[str, Any]]] = []
+    for p in root.glob("*.json"):
+        if not p.is_file():
+            continue
+        obj = _read_json_file(p)
+        if not isinstance(obj, dict):
+            continue
+        docs.append((p, obj))
+
+    docs.sort(key=lambda x: x[0].stat().st_mtime, reverse=True)
+    return docs
+
+
 @router.post("/upload")
-async def upload(file: UploadFile = File(...)) -> dict:
+async def upload(
+    file: UploadFile = File(...),
+    loading_method: str = Form("auto"),
+    strategy: str | None = Form(None),
+    chunking_strategy: str | None = Form(None),
+    chunking_options: str | None = Form(None),
+) -> dict:
     """
-    Upload a document and persist metadata + raw bytes path.
-    Output saved to: app/storage/runs/<run_id>/load.json
+    Upload a document, parse/chunk it, and persist processed JSON.
     """
-    return await load_document(file)
+    try:
+        return await load_document(
+            file,
+            loading_method=loading_method,
+            strategy=strategy,
+            chunking_strategy=chunking_strategy,
+            chunking_options=chunking_options,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/uploads")
 def list_uploads() -> dict[str, Any]:
     """
-    List uploaded documents (from storage_dir/uploads).
+    List uploaded JSON documents from app/01-load-dcos.
     """
-    base = Path(settings.storage_dir) / "uploads"
-    if not base.exists():
-        return {"items": []}
-
     items: list[dict[str, Any]] = []
-    for p in base.iterdir():
-        if not p.is_dir():
-            continue
-        run_id = p.name
-        load_json = Path(settings.storage_dir) / "runs" / run_id / "load.json"
-        if load_json.exists():
-            try:
-                obj = read_json(load_json)
-                payload = obj.get("payload") or {}
-                items.append(
-                    {
-                        "run_id": run_id,
-                        "created_at": obj.get("created_at"),
-                        "filename": payload.get("filename"),
-                        "content_type": payload.get("content_type"),
-                        "raw_path": payload.get("raw_path"),
-                        "size_bytes": payload.get("size_bytes"),
-                    }
-                )
-                continue
-            except Exception:
-                # Fall back to directory scan below
-                pass
-
-        files = [x for x in p.iterdir() if x.is_file()]
-        biggest = max(files, key=lambda x: x.stat().st_size) if files else None
+    for path, obj in _iter_documents():
+        md = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
         items.append(
             {
-                "run_id": run_id,
-                "created_at": None,
-                "filename": biggest.name if biggest else None,
+                "run_id": obj.get("run_id") or path.stem,
+                "created_at": md.get("timestamp"),
+                "filename": obj.get("filename") or path.name,
                 "content_type": None,
-                "raw_path": biggest.as_posix() if biggest else None,
-                "size_bytes": biggest.stat().st_size if biggest else None,
+                "json_path": path.as_posix(),
+                "size_bytes": path.stat().st_size,
+                "total_chunks": md.get("total_chunks"),
+                "total_pages": md.get("total_pages"),
+                "loading_method": md.get("loading_method"),
+                "loading_strategy": md.get("loading_strategy"),
+                "chunking_strategy": md.get("chunking_strategy"),
             }
         )
 
-    items.sort(key=lambda x: (x.get("created_at") or "", x["run_id"]), reverse=True)
     return {"items": items}
 
 
 @router.get("/uploads/{run_id}")
 def get_upload(run_id: str) -> dict[str, Any]:
-    uploads_dir = Path(settings.storage_dir) / "uploads" / run_id
-    if not uploads_dir.exists():
-        raise HTTPException(status_code=404, detail="run_id not found")
+    for path, obj in _iter_documents():
+        if (obj.get("run_id") or path.stem) != run_id:
+            continue
 
-    load_json = Path(settings.storage_dir) / "runs" / run_id / "load.json"
-    data: dict[str, Any] = {"run_id": run_id}
-    if load_json.exists():
-        try:
-            data["load"] = read_json(load_json)
-        except Exception:
-            data["load"] = None
-
-    data["files"] = [
-        {
-            "name": f.name,
-            "path": f.as_posix(),
-            "size_bytes": f.stat().st_size,
+        return {
+            "run_id": run_id,
+            "load": obj,
+            "files": [
+                {
+                    "name": path.name,
+                    "path": path.as_posix(),
+                    "size_bytes": path.stat().st_size,
+                }
+            ],
         }
-        for f in uploads_dir.iterdir()
-        if f.is_file()
-    ]
-    return data
+
+    raise HTTPException(status_code=404, detail="run_id not found")
 
 
 @router.delete("/uploads/{run_id}")
 def delete_upload(run_id: str) -> dict[str, Any]:
-    uploads_dir = Path(settings.storage_dir) / "uploads" / run_id
-    runs_dir = Path(settings.storage_dir) / "runs" / run_id
-    if not uploads_dir.exists() and not runs_dir.exists():
-        raise HTTPException(status_code=404, detail="run_id not found")
+    for path, obj in _iter_documents():
+        if (obj.get("run_id") or path.stem) != run_id:
+            continue
 
-    if uploads_dir.exists():
-        shutil.rmtree(uploads_dir, ignore_errors=True)
-    if runs_dir.exists():
-        shutil.rmtree(runs_dir, ignore_errors=True)
-    return {"ok": True, "run_id": run_id}
+        try:
+            path.unlink(missing_ok=True)
+        except PermissionError as exc:
+            raise HTTPException(status_code=409, detail="file is in use, please retry") from exc
+        return {"ok": True, "run_id": run_id}
 
+    raise HTTPException(status_code=404, detail="run_id not found")
