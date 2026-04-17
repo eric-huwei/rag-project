@@ -6,13 +6,28 @@ import { useToast } from '../components/status/toast'
 import { useRequest } from '../hooks/useRequest'
 import { apiFetch } from '../lib/apiClient'
 
+type DocumentType = 'pdf' | 'docx'
+type PdfLoadingMethod = 'pymupdf' | 'pypdf'
+
+type UploadChunk = {
+  content?: string | null
+}
+
+type LoadedContent = {
+  metadata?: {
+    document_type?: DocumentType | null
+  }
+  chunks?: UploadChunk[]
+}
+
 type UploadResponse = {
   run_id: string
   filepath?: string
-  loaded_content?: unknown
+  loaded_content?: LoadedContent
   result?: {
     filename?: string
     content_type?: string | null
+    document_type?: DocumentType | null
     json_path?: string
     size_bytes?: number
     total_chunks?: number
@@ -29,6 +44,7 @@ type UploadItem = {
   created_at?: string | null
   filename?: string | null
   content_type?: string | null
+  document_type?: DocumentType | null
   json_path?: string | null
   size_bytes?: number | null
   total_chunks?: number | null
@@ -62,29 +78,60 @@ function formatTime(v?: string | null) {
   return d.toLocaleString()
 }
 
+function detectDocumentType(file?: File | null): DocumentType | null {
+  if (!file) return null
+  const name = file.name.toLowerCase()
+  const contentType = file.type.toLowerCase()
+  if (contentType === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
+  if (
+    contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    name.endsWith('.docx')
+  ) {
+    return 'docx'
+  }
+  return null
+}
+
+function buildDocxPreview(upload?: UploadResponse | null) {
+  const documentType = upload?.result?.document_type || upload?.loaded_content?.metadata?.document_type
+  if (documentType !== 'docx') return ''
+
+  const text = (upload?.loaded_content?.chunks || [])
+    .map((chunk) => chunk.content?.trim())
+    .filter((chunk): chunk is string => Boolean(chunk))
+    .join('\n\n')
+    .trim()
+
+  if (!text) return ''
+  if (text.length <= 4000) return text
+  return `${text.slice(0, 4000).trimEnd()}\n\n...`
+}
+
 export function IngestPage() {
   const toast = useToast()
   const [file, setFile] = useState<File | null>(null)
-  const [loadingMethod, setLoadingMethod] = useState<'pymupdf' | 'unstructured'>('pymupdf')
+  const [loadingMethod, setLoadingMethod] = useState<PdfLoadingMethod>('pymupdf')
   const [activeTab, setActiveTab] = useState<'preview' | 'management'>('preview')
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [lastUpload, setLastUpload] = useState<UploadResponse | null>(null)
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string>('')
   const [detail, setDetail] = useState<UploadDetailResponse | null>(null)
+  const selectedDocumentType = useMemo(() => detectDocumentType(file), [file])
+  const docxPreviewText = useMemo(() => buildDocxPreview(lastUpload), [lastUpload])
 
   useEffect(() => {
-    if (!file) {
+    if (!file || selectedDocumentType !== 'pdf') {
       setPreviewUrl('')
       return
     }
     const url = URL.createObjectURL(file)
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
-  }, [file])
+  }, [file, selectedDocumentType])
 
   const fileHint = useMemo(() => {
-    if (!file) return '请选择一个 PDF 文件'
+    if (!file) return '请选择一个 PDF 或 DOCX 文件'
     const mb = (file.size / 1024 / 1024).toFixed(2)
     return `${file.name} (${mb} MB)`
   }, [file])
@@ -115,13 +162,11 @@ export function IngestPage() {
 
   const uploadReq = useRequest(
     async () => {
-      if (!file) throw new Error('请先选择 PDF 文件')
-      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-      if (!isPdf) throw new Error('只支持上传 PDF 文件')
+      if (!file || !selectedDocumentType) throw new Error('请先选择 PDF 或 DOCX 文件')
 
       const form = new FormData()
       form.append('file', file)
-      form.append('loading_method', loadingMethod)
+      form.append('loading_method', selectedDocumentType === 'docx' ? 'python-docx' : loadingMethod)
 
       const res = await apiFetch<UploadResponse>('/api/load/upload', {
         method: 'POST',
@@ -147,16 +192,16 @@ export function IngestPage() {
   return (
     <CyberModulePage
       title="数据导入"
-      subtitle="上传 PDF 到后端（/api/load/upload），右侧支持预览并查看返回结果。"
+      subtitle="上传 PDF / DOCX 到后端（/api/load/upload），PDF 显示文件预览，DOCX 显示解析文本预览。"
       left={
         <div className="space-y-3">
-          <div className="text-sm font-semibold text-cyan-200">Upload PDF</div>
+          <div className="text-sm font-semibold text-cyan-200">Upload PDF / DOCX</div>
 
           <label className="block text-sm text-[#a8b7d1]">
             选择文件
             <input
               type="file"
-              accept="application/pdf,.pdf"
+              accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               className="mt-1.5 block w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] file:mr-3 file:rounded-md file:border-0 file:bg-cyan-400/20 file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-cyan-100"
               onChange={(e) => {
                 const f = e.target.files?.[0] || null
@@ -167,17 +212,26 @@ export function IngestPage() {
             <div className="mt-1.5 text-xs text-[#90a5c5]">{fileHint}</div>
           </label>
 
-          <label className="block text-sm text-[#a8b7d1]">
-            Loading Method
-            <select
-              className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
-              value={loadingMethod}
-              onChange={(e) => setLoadingMethod(e.target.value as 'pymupdf' | 'unstructured')}
-            >
-              <option value="pymupdf">PyMuPDF</option>
-              <option value="unstructured">Unstructured</option>
-            </select>
-          </label>
+          {selectedDocumentType === 'docx' ? (
+            <div className="block text-sm text-[#a8b7d1]">
+              DOCX Parser
+              <div className="mt-1.5 rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff]">
+                python-docx（正文 + 表格）
+              </div>
+            </div>
+          ) : (
+            <label className="block text-sm text-[#a8b7d1]">
+              PDF Loading Method
+              <select
+                className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
+                value={loadingMethod}
+                onChange={(e) => setLoadingMethod(e.target.value as PdfLoadingMethod)}
+              >
+                <option value="pymupdf">PyMuPDF</option>
+                <option value="pypdf">PyPDF</option>
+              </select>
+            </label>
+          )}
 
           <button
             className="inline-flex w-full items-center justify-center rounded-lg border border-cyan-300/55 bg-gradient-to-r from-cyan-700 to-cyan-400 px-4 py-2 text-sm font-semibold text-[#06131f] shadow-[0_0_24px_rgba(34,211,238,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55"
@@ -227,14 +281,28 @@ export function IngestPage() {
           {activeTab === 'preview' ? (
             <>
               <div className="rounded-lg border border-cyan-400/25 bg-[#081324] p-3">
-                {!previewUrl ? (
-                  <div className="text-sm text-[#96a9c8]">请选择 PDF 后这里会显示预览。</div>
+                {!file ? (
+                  <div className="text-sm text-[#96a9c8]">请选择 PDF 或 DOCX 后这里会显示预览。</div>
+                ) : selectedDocumentType === 'pdf' ? (
+                  !previewUrl ? (
+                    <div className="text-sm text-[#96a9c8]">正在准备 PDF 预览...</div>
+                  ) : (
+                    <iframe
+                      title="pdf-preview"
+                      src={previewUrl}
+                      className="h-[520px] w-full rounded-md border border-cyan-400/20"
+                    />
+                  )
+                ) : selectedDocumentType === 'docx' ? (
+                  <div className="h-[520px] overflow-auto rounded-md border border-cyan-400/20 bg-[#050a13] p-4 text-sm text-[#d8e6ff]">
+                    {docxPreviewText ? (
+                      <pre className="whitespace-pre-wrap break-words font-sans">{docxPreviewText}</pre>
+                    ) : (
+                      <div className="text-[#96a9c8]">DOCX 文件上传成功后，这里会显示解析出的文本预览。</div>
+                    )}
+                  </div>
                 ) : (
-                  <iframe
-                    title="pdf-preview"
-                    src={previewUrl}
-                    className="h-[520px] w-full rounded-md border border-cyan-400/20"
-                  />
+                  <div className="text-sm text-[#96a9c8]">当前文件类型暂不支持预览。</div>
                 )}
               </div>
 
@@ -275,6 +343,7 @@ export function IngestPage() {
                             <div className="truncate font-semibold text-cyan-100">{u.filename || '未命名文档'}</div>
                             <div className="mt-1 text-xs text-[#8fa4c3]">run_id: {u.run_id}</div>
                             <div className="mt-2 grid grid-cols-1 gap-1 text-xs md:grid-cols-2">
+                              <div>Type: {u.document_type ? u.document_type.toUpperCase() : '未知'}</div>
                               <div>Pages: {u.total_pages ?? '未知'}</div>
                               <div>Chunks: {u.total_chunks ?? '未知'}</div>
                               <div>Loading Method: {u.loading_method || '未知'}</div>

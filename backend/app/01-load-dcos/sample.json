@@ -1,0 +1,27 @@
+{
+  "run_id": "load_20260417T043520Z_25d70010",
+  "filename": "sample.docx",
+  "metadata": {
+    "filename": "sample.docx",
+    "document_type": "docx",
+    "total_chunks": 1,
+    "total_pages": 1,
+    "total_images": 0,
+    "asset_dir": null,
+    "loading_method": "python-docx",
+    "loading_strategy": null,
+    "chunking_strategy": "sentence",
+    "timestamp": "2026-04-17T04:35:20.470386+00:00"
+  },
+  "chunks": [
+    {
+      "content": "????????????? |Name|Qty|\n|---|---|\n|Apple|3|",
+      "metadata": {
+        "chunk_id": 1,
+        "page_number": 1,
+        "page_range": "1",
+        "word_count": 4
+      }
+    }
+  ]
+}

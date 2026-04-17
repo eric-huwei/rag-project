@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
 from pathlib import Path
 import shutil
 import unittest
 import uuid
+from xml.etree import ElementTree as ET
+from zipfile import ZIP_DEFLATED, ZipFile
 
+from docx import Document
 import fitz
+from fastapi import UploadFile
+from starlette.datastructures import Headers
 
-from app.services.loading_service import LoadingService
+from app.services.loading_service import DOCX_CONTENT_TYPE, LoadingService, WORDPROCESSINGML_NS
 
 
 class LoadingServiceExtractionTests(unittest.TestCase):
@@ -66,6 +73,76 @@ class LoadingServiceExtractionTests(unittest.TestCase):
         content = doc.tobytes()
         doc.close()
         return content
+
+    def _build_docx_with_table(self) -> bytes:
+        document = Document()
+        document.add_paragraph("第一段介绍。这里是第二句！")
+
+        table = document.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Name"
+        table.cell(0, 1).text = "Qty"
+        table.cell(1, 0).text = "Apple"
+        table.cell(1, 1).text = "3"
+
+        document.add_paragraph("结尾段落，用于顺序验证。")
+
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
+    def _build_docx_for_sentence_split(self) -> bytes:
+        document = Document()
+        document.add_paragraph(
+            "第一部分内容很长用于句子分块测试。第二部分内容继续用于句子分块测试！第三部分内容仍然用于句子分块测试？"
+        )
+        document.add_paragraph(
+            "第四部分内容换段继续用于句子分块测试；第五部分内容换段继续用于句子分块测试。第六部分内容继续用于句子分块测试！"
+        )
+        document.add_paragraph(
+            "第七部分内容在第三段里继续延展。第八部分内容在第三段里继续延展。第九部分内容在第三段里继续延展。"
+        )
+
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
+    def _build_docx_with_auto_numbering(self) -> bytes:
+        document = Document()
+        document.add_paragraph("编号库1.", style="List Number")
+        document.add_paragraph("编号库2.", style="List Number")
+        document.add_paragraph("编号库1)", style="List Number 2")
+        document.add_paragraph("编号库2)", style="List Number 2")
+
+        buffer = BytesIO()
+        document.save(buffer)
+        return self._rewrite_docx_list_style(buffer.getvalue(), style_id="ListNumber2", lvl_text="%1)")
+
+    def _rewrite_docx_list_style(self, content: bytes, *, style_id: str, lvl_text: str) -> bytes:
+        buffer = BytesIO()
+        with ZipFile(BytesIO(content)) as source, ZipFile(buffer, "w", compression=ZIP_DEFLATED) as target:
+            numbering_root = ET.fromstring(source.read("word/numbering.xml"))
+            for level in numbering_root.findall(f".//{{{WORDPROCESSINGML_NS}}}lvl"):
+                pstyle = level.find(f"{{{WORDPROCESSINGML_NS}}}pStyle")
+                if pstyle is None or pstyle.get(f"{{{WORDPROCESSINGML_NS}}}val") != style_id:
+                    continue
+                lvl_text_node = level.find(f"{{{WORDPROCESSINGML_NS}}}lvlText")
+                if lvl_text_node is not None:
+                    lvl_text_node.set(f"{{{WORDPROCESSINGML_NS}}}val", lvl_text)
+
+            for item in source.infolist():
+                data = source.read(item.filename)
+                if item.filename == "word/numbering.xml":
+                    data = ET.tostring(numbering_root, encoding="utf-8", xml_declaration=True)
+                target.writestr(item, data)
+        return buffer.getvalue()
+
+    def _make_upload_file(self, content: bytes, *, filename: str, content_type: str) -> UploadFile:
+        return UploadFile(
+            file=BytesIO(content),
+            size=len(content),
+            filename=filename,
+            headers=Headers({"content-type": content_type}),
+        )
 
     def test_extract_with_pymupdf_bytes_renders_table_as_markdown(self) -> None:
         page_map = self.service._extract_with_pymupdf_bytes(self._build_pdf_with_table())
@@ -128,6 +205,77 @@ class LoadingServiceExtractionTests(unittest.TestCase):
         image_path = Path(page_map[0]["metadata"]["images"][0]["path"])
         self.assertTrue(image_path.exists())
         self.assertEqual(image_path.suffix.lower(), ".png")
+
+    def test_load_docx_extracts_paragraphs_and_tables_in_body_order(self) -> None:
+        upload = self._make_upload_file(
+            self._build_docx_with_table(),
+            filename="body-order.docx",
+            content_type=DOCX_CONTENT_TYPE,
+        )
+
+        result = asyncio.run(
+            self.service.load(
+                upload,
+                loading_method="auto",
+            )
+        )
+
+        page_map = self.service.get_page_map()
+        self.assertEqual(len(page_map), 1)
+        page = page_map[0]
+        text = page["text"]
+
+        self.assertEqual(result["result"]["document_type"], "docx")
+        self.assertEqual(result["result"]["loading_method"], "python-docx")
+        self.assertEqual(result["loaded_content"]["metadata"]["document_type"], "docx")
+        self.assertEqual(page["metadata"]["table_count"], 1)
+        self.assertEqual(page["metadata"]["extraction_mode"], "python_docx_body_order")
+        self.assertIn("第一段介绍。这里是第二句！", text)
+        self.assertIn("|Name|Qty|", text)
+        self.assertIn("|Apple|3|", text)
+        self.assertIn("结尾段落，用于顺序验证。", text)
+        self.assertLess(text.index("第一段介绍。这里是第二句！"), text.index("|Name|Qty|"))
+        self.assertLess(text.index("|Apple|3|"), text.index("结尾段落，用于顺序验证。"))
+
+    def test_docx_defaults_to_sentence_chunking_with_chinese_boundaries(self) -> None:
+        upload = self._make_upload_file(
+            self._build_docx_for_sentence_split(),
+            filename="sentence-default.docx",
+            content_type=DOCX_CONTENT_TYPE,
+        )
+
+        result = asyncio.run(
+            self.service.load(
+                upload,
+                loading_method="auto",
+                chunking_options={"max_chars": 100},
+            )
+        )
+
+        page_map = self.service.get_page_map()
+        chunks = result["loaded_content"]["chunks"]
+
+        self.assertEqual(result["result"]["document_type"], "docx")
+        self.assertEqual(result["result"]["chunking_strategy"], "sentence")
+        self.assertEqual(result["loaded_content"]["metadata"]["chunking_strategy"], "sentence")
+        self.assertEqual(result["loaded_content"]["metadata"]["total_pages"], 1)
+        self.assertIn("\n\n", page_map[0]["text"])
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(any("！" in chunk["content"] for chunk in chunks))
+        self.assertTrue(any("；" in chunk["content"] for chunk in chunks))
+
+    def test_load_docx_restores_automatic_numbering_prefixes(self) -> None:
+        page_map = self.service.load_docx(
+            self._build_docx_with_auto_numbering(),
+            filename="auto-numbering.docx",
+            loading_method="python-docx",
+        )
+
+        text = page_map[0]["text"]
+        self.assertIn("1. 编号库1.", text)
+        self.assertIn("2. 编号库2.", text)
+        self.assertIn("1) 编号库1)", text)
+        self.assertIn("2) 编号库2)", text)
 
 
 if __name__ == "__main__":

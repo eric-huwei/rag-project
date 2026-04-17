@@ -6,5 +6,6 @@ httpx
 unstructured
 pymupdf
 pypdf
+python-docx
 sentence-transformers
 openai

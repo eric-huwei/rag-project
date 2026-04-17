@@ -7,8 +7,15 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree as ET
+from zipfile import ZipFile
 
 from fastapi import UploadFile
+
+
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+DOC_CONTENT_TYPE = "application/msword"
+WORDPROCESSINGML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def load_docs_root_dir() -> Path:
@@ -68,6 +75,34 @@ def _parse_strategy_flags(raw: str | None) -> set[str]:
     return flags
 
 
+def _detect_document_type(filename: str, content_type: str | None = None) -> str | None:
+    ext = Path(filename).suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    if ext == ".docx":
+        return "docx"
+    if ext == ".doc":
+        return "doc"
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized_content_type == "application/pdf":
+        return "pdf"
+    if normalized_content_type == DOCX_CONTENT_TYPE:
+        return "docx"
+    if normalized_content_type == DOC_CONTENT_TYPE:
+        return "doc"
+    return None
+
+
+def _resolve_chunking_strategy(document_type: str | None, chunking_strategy: str | None) -> str:
+    if chunking_strategy and chunking_strategy.strip():
+        return chunking_strategy.strip().lower()
+    return "sentence" if document_type == "docx" else "by_page"
+
+
+def _w_tag(name: str) -> str:
+    return f"{{{WORDPROCESSINGML_NS}}}{name}"
+
+
 class LoadingService:
     def __init__(self, root_dir: Path | None = None) -> None:
         self.root_dir = root_dir or load_docs_root_dir()
@@ -84,33 +119,39 @@ class LoadingService:
     ) -> dict[str, Any]:
         run_id = _new_run_id("load")
         filename = _safe_filename(file.filename, "upload.bin")
+        document_type = _detect_document_type(filename, file.content_type)
+        if document_type == "doc":
+            raise ValueError("DOC is not supported yet, please convert the file to DOCX.")
         self.root_dir.mkdir(parents=True, exist_ok=True)
 
         await file.seek(0)
         content = await file.read()
 
-        page_map, resolved_loading_method = self.load_pdf(
+        page_map, resolved_loading_method, resolved_document_type = self.load_content(
             content,
             filename=filename,
+            content_type=file.content_type,
             loading_method=loading_method,
             strategy=strategy,
         )
         asset_summary = self._persist_page_assets(run_id=run_id, filename=filename, page_map=page_map)
         self._page_map = page_map
+        resolved_chunking_strategy = _resolve_chunking_strategy(resolved_document_type, chunking_strategy)
         chunks = self.build_chunks(
             page_map,
-            chunking_strategy=chunking_strategy,
+            chunking_strategy=resolved_chunking_strategy,
             chunking_options=chunking_options,
         )
         metadata = {
             "filename": filename,
+            "document_type": resolved_document_type,
             "total_chunks": len(chunks),
             "total_pages": self.get_total_pages(),
             "total_images": asset_summary["total_images"],
             "asset_dir": asset_summary["asset_dir"],
             "loading_method": resolved_loading_method,
             "loading_strategy": strategy,
-            "chunking_strategy": chunking_strategy or "by_page",
+            "chunking_strategy": resolved_chunking_strategy,
             "timestamp": _utc_now_iso(),
         }
         filepath = self.save_document(
@@ -120,13 +161,14 @@ class LoadingService:
             metadata=metadata,
             loading_method=resolved_loading_method,
             strategy=strategy,
-            chunking_strategy=chunking_strategy,
+            chunking_strategy=resolved_chunking_strategy,
         )
         document_data = json.loads(filepath.read_text(encoding="utf-8"))
 
         payload = {
             "filename": filename,
             "content_type": file.content_type,
+            "document_type": document_data.get("metadata", {}).get("document_type"),
             "json_path": filepath.as_posix(),
             "size_bytes": filepath.stat().st_size,
             "total_chunks": document_data.get("metadata", {}).get("total_chunks"),
@@ -135,7 +177,7 @@ class LoadingService:
             "asset_dir": document_data.get("metadata", {}).get("asset_dir"),
             "loading_method": resolved_loading_method,
             "loading_strategy": strategy,
-            "chunking_strategy": chunking_strategy or "by_page",
+            "chunking_strategy": resolved_chunking_strategy,
             "created_at": _utc_now_iso(),
         }
         return {
@@ -145,11 +187,42 @@ class LoadingService:
             "result": payload,
         }
 
+    def load_content(
+        self,
+        content: bytes,
+        *,
+        filename: str,
+        content_type: str | None,
+        loading_method: str | None,
+        strategy: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str, str | None]:
+        document_type = _detect_document_type(filename, content_type)
+        if document_type == "doc":
+            raise ValueError("DOC is not supported yet, please convert the file to DOCX.")
+        if document_type == "docx":
+            page_map = self.load_docx(
+                content,
+                filename=filename,
+                loading_method=loading_method,
+                strategy=strategy,
+            )
+            return page_map, "python-docx", "docx"
+
+        page_map, method = self.load_pdf(
+            content,
+            filename=filename,
+            document_type=document_type,
+            loading_method=loading_method,
+            strategy=strategy,
+        )
+        return page_map, method, document_type
+
     def load_pdf(
         self,
         content: bytes,
         *,
         filename: str,
+        document_type: str | None = None,
         loading_method: str | None,
         strategy: str | None = None,
     ) -> tuple[list[dict[str, Any]], str]:
@@ -159,7 +232,7 @@ class LoadingService:
         table_aware = not bool({"legacy", "plain_text", "text_only"} & strategy_flags)
         image_aware = not bool({"no_images", "skip_images", "text_only"} & strategy_flags)
         ext = Path(filename).suffix.lower()
-        is_pdf = ext == ".pdf"
+        is_pdf = document_type == "pdf" or ext == ".pdf"
         aliases = {
             "pdf": "pymupdf",
             "default": "auto",
@@ -231,6 +304,22 @@ class LoadingService:
                 p["text"] = self._clean_extracted_text(str(p.get("text", "") or ""))
         return page_map, method
 
+    def load_docx(
+        self,
+        content: bytes,
+        *,
+        filename: str,
+        loading_method: str | None,
+        strategy: str | None = None,
+    ) -> list[dict[str, Any]]:
+        strategy_flags = _parse_strategy_flags(strategy)
+        clean_output = "clean" in strategy_flags
+        page_map = self._extract_with_python_docx_bytes(content)
+        if clean_output:
+            for page in page_map:
+                page["text"] = self._clean_extracted_text(str(page.get("text", "") or ""))
+        return page_map
+
     def _extract_with_pypdf_bytes(self, content: bytes) -> list[dict[str, Any]]:
         try:
             from pypdf import PdfReader
@@ -281,6 +370,402 @@ class LoadingService:
             # Avoid returning noisy binary gibberish for binary formats like PDF.
             return [{"page": 1, "text": ""}]
         return [{"page": 1, "text": content.decode("utf-8", errors="ignore")}]
+
+    def _extract_with_python_docx_bytes(self, content: bytes) -> list[dict[str, Any]]:
+        try:
+            from docx import Document
+            from docx.oxml.table import CT_Tbl
+            from docx.oxml.text.paragraph import CT_P
+            from docx.table import Table
+            from docx.text.paragraph import Paragraph
+        except ImportError as exc:
+            raise ValueError("python-docx is not installed") from exc
+
+        document = Document(BytesIO(content))
+        numbering_context = self._build_docx_numbering_context(content)
+        list_state: dict[int, dict[int, int]] = {}
+        blocks: list[str] = []
+        table_count = 0
+        paragraph_count = 0
+
+        body = document.element.body
+        for child in body.iterchildren():
+            if isinstance(child, CT_P):
+                paragraph = Paragraph(child, document)
+                text = _normalize_whitespace(paragraph.text)
+                prefix = self._resolve_docx_list_prefix(
+                    paragraph,
+                    numbering_context=numbering_context,
+                    list_state=list_state,
+                )
+                rendered_text = f"{prefix}{text}".strip() if text else ""
+                if rendered_text:
+                    blocks.append(rendered_text)
+                    paragraph_count += 1
+                continue
+
+            if isinstance(child, CT_Tbl):
+                table = Table(child, document)
+                rows = self._extract_docx_table_rows(table)
+                markdown = self._table_cells_to_markdown(rows)
+                if markdown:
+                    blocks.append(markdown)
+                    table_count += 1
+
+        merged_text = "\n\n".join(blocks).strip()
+        metadata = {
+            "table_count": table_count,
+            "image_count": 0,
+            "paragraph_count": paragraph_count,
+            "block_count": len(blocks),
+            "extraction_mode": "python_docx_body_order",
+        }
+        return [{"page": 1, "text": merged_text, "metadata": metadata}]
+
+    def _build_docx_numbering_context(self, content: bytes) -> dict[str, Any]:
+        try:
+            with ZipFile(BytesIO(content)) as archive:
+                styles_root = self._read_docx_xml_root(archive, "word/styles.xml")
+                numbering_root = self._read_docx_xml_root(archive, "word/numbering.xml")
+        except Exception:
+            return {"styles": {}, "abstracts": {}, "numbers": {}}
+
+        styles = self._build_docx_style_numbering_map(styles_root) if styles_root is not None else {}
+        abstracts, numbers = self._build_docx_numbering_definitions(numbering_root) if numbering_root is not None else ({}, {})
+        return {
+            "styles": styles,
+            "abstracts": abstracts,
+            "numbers": numbers,
+        }
+
+    def _read_docx_xml_root(self, archive: ZipFile, part_name: str) -> ET.Element | None:
+        try:
+            return ET.fromstring(archive.read(part_name))
+        except KeyError:
+            return None
+        except ET.ParseError:
+            return None
+
+    def _build_docx_style_numbering_map(self, styles_root: ET.Element) -> dict[str, dict[str, Any]]:
+        styles: dict[str, dict[str, Any]] = {}
+        for style in styles_root.findall(_w_tag("style")):
+            style_id = style.get(_w_tag("styleId"))
+            if not style_id:
+                continue
+
+            based_on = None
+            based_on_element = style.find(_w_tag("basedOn"))
+            if based_on_element is not None:
+                based_on = based_on_element.get(_w_tag("val"))
+
+            ppr = style.find(_w_tag("pPr"))
+            num_id, ilvl = self._parse_docx_numpr_element(ppr.find(_w_tag("numPr")) if ppr is not None else None)
+            styles[style_id] = {
+                "based_on": based_on,
+                "num_id": num_id,
+                "ilvl": ilvl,
+            }
+        return styles
+
+    def _build_docx_numbering_definitions(
+        self,
+        numbering_root: ET.Element,
+    ) -> tuple[dict[int, dict[int, dict[str, Any]]], dict[int, dict[str, Any]]]:
+        abstracts: dict[int, dict[int, dict[str, Any]]] = {}
+        numbers: dict[int, dict[str, Any]] = {}
+
+        for abstract_num in numbering_root.findall(_w_tag("abstractNum")):
+            abstract_id = self._parse_xml_int(abstract_num.get(_w_tag("abstractNumId")))
+            if abstract_id is None:
+                continue
+
+            level_map: dict[int, dict[str, Any]] = {}
+            for level in abstract_num.findall(_w_tag("lvl")):
+                ilvl = self._parse_xml_int(level.get(_w_tag("ilvl")), default=0)
+                level_map[ilvl] = self._parse_docx_level_definition(level)
+            abstracts[abstract_id] = level_map
+
+        for number in numbering_root.findall(_w_tag("num")):
+            num_id = self._parse_xml_int(number.get(_w_tag("numId")))
+            if num_id is None:
+                continue
+
+            abstract_num_id = None
+            abstract_num_element = number.find(_w_tag("abstractNumId"))
+            if abstract_num_element is not None:
+                abstract_num_id = self._parse_xml_int(abstract_num_element.get(_w_tag("val")))
+
+            overrides: dict[int, dict[str, Any]] = {}
+            start_overrides: dict[int, int] = {}
+            for level_override in number.findall(_w_tag("lvlOverride")):
+                ilvl = self._parse_xml_int(level_override.get(_w_tag("ilvl")), default=0)
+                start_override = level_override.find(_w_tag("startOverride"))
+                if start_override is not None:
+                    start_value = self._parse_xml_int(start_override.get(_w_tag("val")))
+                    if start_value is not None:
+                        start_overrides[ilvl] = start_value
+
+                level = level_override.find(_w_tag("lvl"))
+                if level is not None:
+                    overrides[ilvl] = self._parse_docx_level_definition(level)
+
+            numbers[num_id] = {
+                "abstract_num_id": abstract_num_id,
+                "overrides": overrides,
+                "start_overrides": start_overrides,
+            }
+
+        return abstracts, numbers
+
+    def _parse_docx_numpr_element(self, numpr: ET.Element | None) -> tuple[int | None, int | None]:
+        if numpr is None:
+            return None, None
+
+        ilvl = None
+        ilvl_element = numpr.find(_w_tag("ilvl"))
+        if ilvl_element is not None:
+            ilvl = self._parse_xml_int(ilvl_element.get(_w_tag("val")))
+
+        num_id = None
+        num_id_element = numpr.find(_w_tag("numId"))
+        if num_id_element is not None:
+            num_id = self._parse_xml_int(num_id_element.get(_w_tag("val")))
+
+        return num_id, ilvl
+
+    def _parse_docx_level_definition(self, level: ET.Element) -> dict[str, Any]:
+        start = 1
+        start_element = level.find(_w_tag("start"))
+        if start_element is not None:
+            start = self._parse_xml_int(start_element.get(_w_tag("val")), default=1)
+
+        num_fmt = "decimal"
+        num_fmt_element = level.find(_w_tag("numFmt"))
+        if num_fmt_element is not None:
+            num_fmt = str(num_fmt_element.get(_w_tag("val")) or "decimal")
+
+        lvl_text = f"%{self._parse_xml_int(level.get(_w_tag('ilvl')), default=0) + 1}"
+        lvl_text_element = level.find(_w_tag("lvlText"))
+        if lvl_text_element is not None:
+            lvl_text = str(lvl_text_element.get(_w_tag("val")) or lvl_text)
+
+        suff = "space"
+        suff_element = level.find(_w_tag("suff"))
+        if suff_element is not None:
+            suff = str(suff_element.get(_w_tag("val")) or suff)
+
+        return {
+            "start": max(1, start),
+            "num_fmt": num_fmt,
+            "lvl_text": lvl_text,
+            "suff": suff,
+        }
+
+    def _resolve_docx_list_prefix(
+        self,
+        paragraph: Any,
+        *,
+        numbering_context: dict[str, Any],
+        list_state: dict[int, dict[int, int]],
+    ) -> str:
+        num_id, ilvl = self._resolve_docx_paragraph_numbering(paragraph, numbering_context)
+        if num_id is None:
+            return ""
+
+        level_def = self._resolve_docx_level_definition(numbering_context, num_id, ilvl)
+        if not level_def:
+            return ""
+
+        counters = list_state.setdefault(num_id, {})
+        next_value = counters.get(ilvl, int(level_def.get("start", 1)) - 1) + 1
+        counters[ilvl] = next_value
+
+        for level in list(counters):
+            if level > ilvl:
+                del counters[level]
+
+        prefix = self._render_docx_numbering_text(
+            numbering_context,
+            num_id=num_id,
+            ilvl=ilvl,
+            counters=counters,
+        )
+        if not prefix:
+            return ""
+
+        indent = "  " * max(0, ilvl)
+        if not prefix[-1].isspace():
+            prefix = f"{prefix} "
+        return f"{indent}{prefix}"
+
+    def _resolve_docx_paragraph_numbering(
+        self,
+        paragraph: Any,
+        numbering_context: dict[str, Any],
+    ) -> tuple[int | None, int]:
+        paragraph_num_id = None
+        paragraph_ilvl = None
+        style_id = None
+
+        ppr = paragraph._p.find(_w_tag("pPr"))
+        if ppr is not None:
+            paragraph_num_id, paragraph_ilvl = self._parse_docx_numpr_element(ppr.find(_w_tag("numPr")))
+            pstyle = ppr.find(_w_tag("pStyle"))
+            if pstyle is not None:
+                style_id = pstyle.get(_w_tag("val"))
+
+        if style_id is None:
+            style = getattr(paragraph, "style", None)
+            style_id = getattr(style, "style_id", None)
+
+        style_num_id, style_ilvl = self._resolve_docx_style_numbering(
+            style_id,
+            numbering_context.get("styles", {}),
+            memo={},
+        )
+
+        resolved_num_id = paragraph_num_id if paragraph_num_id is not None else style_num_id
+        resolved_ilvl = paragraph_ilvl if paragraph_ilvl is not None else style_ilvl
+        return resolved_num_id, max(0, resolved_ilvl or 0)
+
+    def _resolve_docx_style_numbering(
+        self,
+        style_id: str | None,
+        styles: dict[str, dict[str, Any]],
+        *,
+        memo: dict[str, tuple[int | None, int | None]],
+    ) -> tuple[int | None, int | None]:
+        if not style_id:
+            return None, None
+        if style_id in memo:
+            return memo[style_id]
+
+        style_info = styles.get(style_id)
+        if style_info is None:
+            memo[style_id] = (None, None)
+            return memo[style_id]
+
+        parent_num_id, parent_ilvl = self._resolve_docx_style_numbering(
+            style_info.get("based_on"),
+            styles,
+            memo=memo,
+        )
+        num_id = style_info.get("num_id") if style_info.get("num_id") is not None else parent_num_id
+        ilvl = style_info.get("ilvl") if style_info.get("ilvl") is not None else parent_ilvl
+        memo[style_id] = (num_id, ilvl)
+        return memo[style_id]
+
+    def _resolve_docx_level_definition(
+        self,
+        numbering_context: dict[str, Any],
+        num_id: int,
+        ilvl: int,
+    ) -> dict[str, Any] | None:
+        number_info = numbering_context.get("numbers", {}).get(num_id)
+        if not isinstance(number_info, dict):
+            return None
+
+        abstract_id = number_info.get("abstract_num_id")
+        abstract_levels = numbering_context.get("abstracts", {}).get(abstract_id, {})
+        base_level = abstract_levels.get(ilvl)
+        override_level = number_info.get("overrides", {}).get(ilvl)
+        if base_level is None and override_level is None:
+            return None
+
+        resolved = dict(base_level or {})
+        resolved.update(override_level or {})
+        start_override = number_info.get("start_overrides", {}).get(ilvl)
+        if start_override is not None:
+            resolved["start"] = start_override
+        return resolved
+
+    def _render_docx_numbering_text(
+        self,
+        numbering_context: dict[str, Any],
+        *,
+        num_id: int,
+        ilvl: int,
+        counters: dict[int, int],
+    ) -> str:
+        level_def = self._resolve_docx_level_definition(numbering_context, num_id, ilvl)
+        if not level_def:
+            return ""
+
+        lvl_text = str(level_def.get("lvl_text") or f"%{ilvl + 1}")
+        tokens = re.findall(r"%(\d+)", lvl_text)
+        if not tokens:
+            return lvl_text.strip()
+
+        rendered = lvl_text
+        for token in tokens:
+            ref_level = max(0, int(token) - 1)
+            ref_level_def = self._resolve_docx_level_definition(numbering_context, num_id, ref_level) or {}
+            ref_value = counters.get(ref_level, int(ref_level_def.get("start", 1)))
+            replacement = self._format_docx_number(ref_value, str(ref_level_def.get("num_fmt") or "decimal"))
+            rendered = rendered.replace(f"%{token}", replacement)
+        return rendered.strip()
+
+    def _format_docx_number(self, value: int, num_fmt: str) -> str:
+        normalized = num_fmt.strip().lower()
+        if normalized in {"decimal", "decimalzero"}:
+            return str(value)
+        if normalized == "upperletter":
+            return self._to_alphabetic_number(value).upper()
+        if normalized == "lowerletter":
+            return self._to_alphabetic_number(value).lower()
+        if normalized == "upperroman":
+            return self._to_roman_number(value).upper()
+        if normalized == "lowerroman":
+            return self._to_roman_number(value).lower()
+        return str(value)
+
+    def _to_alphabetic_number(self, value: int) -> str:
+        safe_value = max(1, value)
+        chars: list[str] = []
+        while safe_value > 0:
+            safe_value -= 1
+            chars.append(chr(ord("A") + (safe_value % 26)))
+            safe_value //= 26
+        return "".join(reversed(chars))
+
+    def _to_roman_number(self, value: int) -> str:
+        safe_value = max(1, value)
+        numerals = [
+            (1000, "M"),
+            (900, "CM"),
+            (500, "D"),
+            (400, "CD"),
+            (100, "C"),
+            (90, "XC"),
+            (50, "L"),
+            (40, "XL"),
+            (10, "X"),
+            (9, "IX"),
+            (5, "V"),
+            (4, "IV"),
+            (1, "I"),
+        ]
+        out: list[str] = []
+        for numeral_value, numeral in numerals:
+            while safe_value >= numeral_value:
+                out.append(numeral)
+                safe_value -= numeral_value
+        return "".join(out) or str(value)
+
+    def _parse_xml_int(self, raw: Any, *, default: int | None = None) -> int | None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+
+    def _extract_docx_table_rows(self, table: Any) -> list[list[str]]:
+        rows: list[list[str]] = []
+        for row in getattr(table, "rows", []):
+            row_values: list[str] = []
+            for cell in getattr(row, "cells", []):
+                row_values.append(_normalize_whitespace(getattr(cell, "text", "")))
+            rows.append(row_values)
+        return rows
 
     def _extract_pymupdf_page(
         self,
@@ -808,7 +1293,15 @@ class LoadingService:
         return out
 
     def _split_sentence(self, text: str, max_chars: int) -> list[str]:
-        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+        blocks = [block.strip() for block in re.split(r"\n\s*\n+", text) if block.strip()]
+        sentences: list[str] = []
+        for block in blocks:
+            parts = [
+                part.strip()
+                for part in re.split(r"(?<=[。！？；])|(?<=[.!?])\s+", block)
+                if part.strip()
+            ]
+            sentences.extend(parts or [block])
         if not sentences:
             return []
         out: list[str] = []
@@ -880,4 +1373,3 @@ async def load_document(
         chunking_strategy=chunking_strategy,
         chunking_options=parsed_chunking_options,
     )
-

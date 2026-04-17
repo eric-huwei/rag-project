@@ -73,6 +73,7 @@ def list_uploads() -> dict[str, Any]:
                 "created_at": md.get("timestamp"),
                 "filename": obj.get("filename") or path.name,
                 "content_type": None,
+                "document_type": md.get("document_type"),
                 "json_path": path.as_posix(),
                 "size_bytes": path.stat().st_size,
                 "total_chunks": md.get("total_chunks"),
