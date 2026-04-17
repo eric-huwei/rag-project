@@ -8,6 +8,8 @@ import { apiFetch } from '../lib/apiClient'
 
 type DocumentType = 'pdf' | 'docx'
 type PdfLoadingMethod = 'pymupdf' | 'pypdf'
+type ChunkingStrategy = 'auto' | 'by_page' | 'sentence' | 'fixed_size'
+type ExplicitChunkingStrategy = Exclude<ChunkingStrategy, 'auto'>
 
 type UploadChunk = {
   content?: string | null
@@ -107,10 +109,31 @@ function buildDocxPreview(upload?: UploadResponse | null) {
   return `${text.slice(0, 4000).trimEnd()}\n\n...`
 }
 
+function resolveEffectiveChunkingStrategy(
+  documentType: DocumentType | null,
+  strategy: ChunkingStrategy,
+): ExplicitChunkingStrategy {
+  if (strategy !== 'auto') return strategy
+  return documentType === 'docx' ? 'sentence' : 'by_page'
+}
+
+function parsePositiveInteger(raw: string, label: string, { min = 1, allowZero = false } = {}) {
+  const value = Number(raw)
+  const threshold = allowZero ? 0 : min
+  if (!Number.isInteger(value) || value < threshold) {
+    throw new Error(`${label}必须是${allowZero ? '不小于 0' : `不小于 ${min}`}的整数`)
+  }
+  return value
+}
+
 export function IngestPage() {
   const toast = useToast()
   const [file, setFile] = useState<File | null>(null)
   const [loadingMethod, setLoadingMethod] = useState<PdfLoadingMethod>('pymupdf')
+  const [chunkingStrategy, setChunkingStrategy] = useState<ChunkingStrategy>('auto')
+  const [sentenceMaxChars, setSentenceMaxChars] = useState<string>('1200')
+  const [fixedChunkSize, setFixedChunkSize] = useState<string>('400')
+  const [fixedOverlap, setFixedOverlap] = useState<string>('50')
   const [activeTab, setActiveTab] = useState<'preview' | 'management'>('preview')
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [lastUpload, setLastUpload] = useState<UploadResponse | null>(null)
@@ -119,6 +142,10 @@ export function IngestPage() {
   const [detail, setDetail] = useState<UploadDetailResponse | null>(null)
   const selectedDocumentType = useMemo(() => detectDocumentType(file), [file])
   const docxPreviewText = useMemo(() => buildDocxPreview(lastUpload), [lastUpload])
+  const effectiveChunkingStrategy = useMemo(
+    () => resolveEffectiveChunkingStrategy(selectedDocumentType, chunkingStrategy),
+    [chunkingStrategy, selectedDocumentType],
+  )
 
   useEffect(() => {
     if (!file || selectedDocumentType !== 'pdf') {
@@ -167,6 +194,27 @@ export function IngestPage() {
       const form = new FormData()
       form.append('file', file)
       form.append('loading_method', selectedDocumentType === 'docx' ? 'python-docx' : loadingMethod)
+      if (chunkingStrategy !== 'auto') {
+        form.append('chunking_strategy', chunkingStrategy)
+      }
+
+      if (effectiveChunkingStrategy === 'sentence') {
+        const maxChars = parsePositiveInteger(sentenceMaxChars, '单块最大字符数', { min: 100 })
+        form.append('chunking_options', JSON.stringify({ max_chars: maxChars }))
+      } else if (effectiveChunkingStrategy === 'fixed_size') {
+        const chunkSize = parsePositiveInteger(fixedChunkSize, 'Chunk Size')
+        const overlap = parsePositiveInteger(fixedOverlap, 'Overlap', { allowZero: true })
+        if (overlap >= chunkSize) {
+          throw new Error('Overlap 必须小于 Chunk Size')
+        }
+        form.append(
+          'chunking_options',
+          JSON.stringify({
+            chunk_size: chunkSize,
+            overlap,
+          }),
+        )
+      }
 
       const res = await apiFetch<UploadResponse>('/api/load/upload', {
         method: 'POST',
@@ -232,6 +280,86 @@ export function IngestPage() {
               </select>
             </label>
           )}
+
+          <label className="block text-sm text-[#a8b7d1]">
+            Chunking Strategy
+            <select
+              className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
+              value={chunkingStrategy}
+              onChange={(e) => setChunkingStrategy(e.target.value as ChunkingStrategy)}
+            >
+              <option value="auto">Auto（DOCX 默认句子切分，PDF 默认按页）</option>
+              <option value="by_page">By Page</option>
+              <option value="sentence">Sentence</option>
+              <option value="fixed_size">Fixed Size</option>
+            </select>
+            <div className="mt-1.5 text-xs text-[#90a5c5]">
+              当前生效策略：{effectiveChunkingStrategy}
+              {chunkingStrategy === 'auto'
+                ? selectedDocumentType === 'docx'
+                  ? '（根据 DOCX 默认规则自动选择）'
+                  : selectedDocumentType === 'pdf'
+                    ? '（根据 PDF 默认规则自动选择）'
+                    : '（选择文件后自动匹配）'
+                : ''}
+            </div>
+          </label>
+
+          {effectiveChunkingStrategy === 'sentence' ? (
+            <label className="block text-sm text-[#a8b7d1]">
+              单块最大字符数
+              <input
+                type="number"
+                min={100}
+                step={100}
+                className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none transition placeholder:text-[#617392] focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
+                value={sentenceMaxChars}
+                onChange={(e) => setSentenceMaxChars(e.target.value)}
+                placeholder="例如 1200"
+              />
+              <div className="mt-1.5 text-xs text-[#90a5c5]">
+                先按段落和中英文句号切句，再尽量合并到这个长度以内。
+              </div>
+            </label>
+          ) : null}
+
+          {effectiveChunkingStrategy === 'fixed_size' ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="block text-sm text-[#a8b7d1]">
+                Chunk Size
+                <input
+                  type="number"
+                  min={1}
+                  step={50}
+                  className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none transition placeholder:text-[#617392] focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
+                  value={fixedChunkSize}
+                  onChange={(e) => setFixedChunkSize(e.target.value)}
+                  placeholder="例如 400"
+                />
+              </label>
+              <label className="block text-sm text-[#a8b7d1]">
+                Overlap
+                <input
+                  type="number"
+                  min={0}
+                  step={10}
+                  className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none transition placeholder:text-[#617392] focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
+                  value={fixedOverlap}
+                  onChange={(e) => setFixedOverlap(e.target.value)}
+                  placeholder="例如 50"
+                />
+              </label>
+              <div className="md:col-span-2 text-xs text-[#90a5c5]">
+                固定按词数切分，`Overlap` 必须小于 `Chunk Size`。
+              </div>
+            </div>
+          ) : null}
+
+          {effectiveChunkingStrategy === 'by_page' ? (
+            <div className="rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-xs text-[#90a5c5]">
+              当前按页分块，每页输出一个 chunk，不需要额外参数。
+            </div>
+          ) : null}
 
           <button
             className="inline-flex w-full items-center justify-center rounded-lg border border-cyan-300/55 bg-gradient-to-r from-cyan-700 to-cyan-400 px-4 py-2 text-sm font-semibold text-[#06131f] shadow-[0_0_24px_rgba(34,211,238,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-55"

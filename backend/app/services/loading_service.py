@@ -16,6 +16,72 @@ from fastapi import UploadFile
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 DOC_CONTENT_TYPE = "application/msword"
 WORDPROCESSINGML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+DEFAULT_CHUNKING_STRATEGY_BY_DOCUMENT_TYPE: dict[str, str] = {
+    "pdf": "by_page",
+    "docx": "sentence",
+}
+CHUNKING_STRATEGY_CONFIG: list[dict[str, Any]] = [
+    {
+        "id": "auto",
+        "label": "Auto",
+        "description": "按文档类型自动选择默认分块策略。",
+        "request_value": None,
+        "fields": [],
+    },
+    {
+        "id": "by_page",
+        "label": "By Page",
+        "description": "每页输出一个 chunk。",
+        "request_value": "by_page",
+        "fields": [],
+    },
+    {
+        "id": "sentence",
+        "label": "Sentence",
+        "description": "先按段落和中英文句号切句，再按最大长度合并。",
+        "request_value": "sentence",
+        "fields": [
+            {
+                "key": "max_chars",
+                "label": "单块最大字符数",
+                "type": "integer",
+                "default": 1200,
+                "min": 100,
+                "step": 100,
+                "allow_zero": False,
+                "description": "句子会尽量合并到这个长度以内。",
+            }
+        ],
+    },
+    {
+        "id": "fixed_size",
+        "label": "Fixed Size",
+        "description": "按词数固定切分，并保留重叠窗口。",
+        "request_value": "fixed_size",
+        "fields": [
+            {
+                "key": "chunk_size",
+                "label": "Chunk Size",
+                "type": "integer",
+                "default": 400,
+                "min": 1,
+                "step": 50,
+                "allow_zero": False,
+                "description": "每个 chunk 允许的最大词数。",
+            },
+            {
+                "key": "overlap",
+                "label": "Overlap",
+                "type": "integer",
+                "default": 50,
+                "min": 0,
+                "step": 10,
+                "allow_zero": True,
+                "description": "相邻 chunk 之间保留的重叠词数。",
+            },
+        ],
+    },
+]
 
 
 def load_docs_root_dir() -> Path:
@@ -96,7 +162,14 @@ def _detect_document_type(filename: str, content_type: str | None = None) -> str
 def _resolve_chunking_strategy(document_type: str | None, chunking_strategy: str | None) -> str:
     if chunking_strategy and chunking_strategy.strip():
         return chunking_strategy.strip().lower()
-    return "sentence" if document_type == "docx" else "by_page"
+    return DEFAULT_CHUNKING_STRATEGY_BY_DOCUMENT_TYPE.get(document_type or "", "by_page")
+
+
+def get_chunking_config() -> dict[str, Any]:
+    return {
+        "defaults_by_document_type": dict(DEFAULT_CHUNKING_STRATEGY_BY_DOCUMENT_TYPE),
+        "strategies": [dict(item) for item in CHUNKING_STRATEGY_CONFIG],
+    }
 
 
 def _w_tag(name: str) -> str:

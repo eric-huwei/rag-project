@@ -14,7 +14,12 @@ import fitz
 from fastapi import UploadFile
 from starlette.datastructures import Headers
 
-from app.services.loading_service import DOCX_CONTENT_TYPE, LoadingService, WORDPROCESSINGML_NS
+from app.services.loading_service import (
+    DOCX_CONTENT_TYPE,
+    LoadingService,
+    WORDPROCESSINGML_NS,
+    get_chunking_config,
+)
 
 
 class LoadingServiceExtractionTests(unittest.TestCase):
@@ -276,6 +281,18 @@ class LoadingServiceExtractionTests(unittest.TestCase):
         self.assertIn("2. 编号库2.", text)
         self.assertIn("1) 编号库1)", text)
         self.assertIn("2) 编号库2)", text)
+
+    def test_chunking_config_matches_backend_defaults(self) -> None:
+        config = get_chunking_config()
+        defaults = config["defaults_by_document_type"]
+        strategies = {item["id"]: item for item in config["strategies"]}
+
+        self.assertEqual(defaults["pdf"], "by_page")
+        self.assertEqual(defaults["docx"], "sentence")
+        self.assertIn("auto", strategies)
+        self.assertIn("sentence", strategies)
+        self.assertEqual(strategies["auto"]["request_value"], None)
+        self.assertEqual(strategies["sentence"]["fields"][0]["key"], "max_chars")
 
 
 if __name__ == "__main__":

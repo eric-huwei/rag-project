@@ -53,7 +53,10 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     const payload = await readJsonSafely(res)
-    const msg = typeof payload === 'string' ? payload : (payload as any)?.message || res.statusText
+    const msg =
+      typeof payload === 'string'
+        ? payload
+        : (payload as any)?.detail || (payload as any)?.message || res.statusText
     throw new ApiError(msg || '请求失败', res.status, payload)
   }
 

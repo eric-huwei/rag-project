@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.services.loading_service import load_document, load_docs_root_dir
+from app.services.loading_service import get_chunking_config, load_document, load_docs_root_dir
 
 router = APIRouter()
 
@@ -57,6 +57,11 @@ async def upload(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/chunking-config")
+def chunking_config() -> dict[str, Any]:
+    return get_chunking_config()
 
 
 @router.get("/uploads")
