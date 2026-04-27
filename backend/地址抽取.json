@@ -1,0 +1,2995 @@
+{
+  "nodes": [
+    {
+      "nodeId": "userGuide",
+      "name": "系统配置",
+      "intro": "可以配置应用的系统参数",
+      "avatar": "/imgs/workflow/userGuide.png",
+      "flowNodeType": "userGuide",
+      "position": {
+        "x": -364.85349772458795,
+        "y": -376.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "welcomeText",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "core.app.Welcome Text",
+          "value": ""
+        },
+        {
+          "key": "envVariables",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "环境变量",
+          "value": [
+            {
+              "id": "5116ct",
+              "key": "ADDRESS",
+              "label": "ADDRESS",
+              "type": "input",
+              "valueType": "string",
+              "required": true,
+              "maxLen": 50,
+              "enums": [],
+              "defaultValue": "ADDRESS",
+              "remark": ""
+            }
+          ]
+        },
+        {
+          "key": "sessionVariables",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "会话变量",
+          "value": [
+            {
+              "id": "wc51vl",
+              "key": "state",
+              "label": "state",
+              "type": "custom",
+              "valueType": "string",
+              "required": false,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "remark": "state"
+            },
+            {
+              "id": "dcnpy2",
+              "key": "matched_index",
+              "label": "matched_index",
+              "type": "custom",
+              "valueType": "number",
+              "required": false,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "remark": "已命中候选索引",
+              "icon": "core/app/variable/external",
+              "value": 0
+            },
+            {
+              "id": "lastUnmatchedAddress",
+              "key": "last_unmatched_address",
+              "label": "last_unmatched_address",
+              "type": "custom",
+              "valueType": "string",
+              "required": false,
+              "maxLen": 200,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "remark": "上一轮未匹配地址"
+            },
+            {
+              "id": "similarNoMatchCount",
+              "key": "similar_no_match_count",
+              "label": "similar_no_match_count",
+              "type": "custom",
+              "valueType": "number",
+              "required": false,
+              "maxLen": 20,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "remark": "连续相似未匹配次数"
+            }
+          ]
+        },
+        {
+          "key": "variables",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "core.app.Chat Variable",
+          "value": [
+            {
+              "id": "8v7vzn",
+              "key": "callId",
+              "label": "呼叫流水",
+              "type": "input",
+              "valueType": "string",
+              "required": true,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "value": "",
+              "icon": "core/app/variable/input"
+            },
+            {
+              "id": "vq3qmf",
+              "key": "caller",
+              "label": "主叫号码",
+              "type": "input",
+              "valueType": "string",
+              "required": true,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "value": "",
+              "icon": "core/app/variable/input"
+            },
+            {
+              "id": "i3bnr5",
+              "key": "provinceCode",
+              "label": "省份编码",
+              "type": "input",
+              "valueType": "string",
+              "required": false,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "value": "",
+              "icon": "core/app/variable/input"
+            },
+            {
+              "id": "jeajei",
+              "key": "productAddress",
+              "label": "用户名下所有产品安装地址，多个地址使用||分隔",
+              "type": "textarea",
+              "valueType": "string",
+              "required": false,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "value": "",
+              "icon": "core/app/variable/textarea"
+            },
+            {
+              "id": "dsksl8",
+              "key": "faultAddress",
+              "label": "查询的故障地址，多个地址使用||分隔",
+              "type": "textarea",
+              "valueType": "string",
+              "required": false,
+              "maxLen": 50,
+              "enums": [
+                {
+                  "value": ""
+                }
+              ],
+              "value": "",
+              "icon": "core/app/variable/textarea"
+            }
+          ]
+        },
+        {
+          "key": "questionGuide",
+          "valueType": "boolean",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "core.app.Question Guide",
+          "value": false
+        },
+        {
+          "key": "tts",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "",
+          "value": {
+            "type": "web"
+          }
+        },
+        {
+          "key": "whisper",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "",
+          "value": {
+            "open": false,
+            "autoSend": false,
+            "autoTTSResponse": false
+          }
+        },
+        {
+          "key": "scheduleTrigger",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "",
+          "value": null
+        }
+      ],
+      "outputs": [],
+      "templateType": "systemInput"
+    },
+    {
+      "nodeId": "448745",
+      "name": "开始",
+      "intro": "",
+      "avatar": "/imgs/workflow/userChatInput.svg",
+      "flowNodeType": "workflowStart",
+      "position": {
+        "x": -364.85349772458795,
+        "y": -376.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "userChatInput",
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "valueType": "string",
+          "label": "用户问题",
+          "required": true,
+          "toolDescription": "用户问题"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "userChatInput",
+          "key": "userChatInput",
+          "label": "core.module.input.label.user question",
+          "valueType": "string",
+          "type": "static"
+        }
+      ],
+      "templateType": "systemInput"
+    },
+    {
+      "nodeId": "kjz5uLBPQJLR",
+      "name": "addressList",
+      "intro": "执行一段脚本代码，通常用于进行复杂的数据处理",
+      "avatar": "/imgs/workflow/code.svg",
+      "flowNodeType": "code",
+      "showStatus": true,
+      "position": {
+        "x": 535.1465022754121,
+        "y": -335.1965473647891
+      },
+      "version": "v2",
+      "inputs": [
+        {
+          "key": "system_addInputParam",
+          "renderTypeList": [
+            "addInputParam"
+          ],
+          "valueType": "dynamic",
+          "label": "",
+          "required": false,
+          "description": "这些变量会作为代码的运行的输入参数",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "key": "address_two",
+          "valueType": "string",
+          "label": "address_two",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "VARIABLE_NODE_ID",
+            "productAddress"
+          ]
+        },
+        {
+          "renderTypeList": [
+            "reference"
+          ],
+          "valueType": "string",
+          "canEdit": true,
+          "key": "address_one",
+          "label": "address_one",
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "required": false,
+          "description": "",
+          "value": [
+            "VARIABLE_NODE_ID",
+            "faultAddress"
+          ]
+        },
+        {
+          "key": "codeType",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": "js"
+        },
+        {
+          "key": "isNewVersion",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": true
+        },
+        {
+          "key": "code",
+          "renderTypeList": [
+            "custom"
+          ],
+          "required": false,
+          "label": "",
+          "value": "function main({ address_one, address_two }) {\n  // 处理可能为空的情况，避免 split 返回 [\"\"]\n  const arr1 = address_one ? address_one.split('||') : [];\n  const arr2 = address_two ? address_two.split('||') : [];\n\n  // 使用扩展运算符将两个数组合并\n  const data = [...arr1, ...arr2];\n\n  // 如果需要去除空字符串或去除首尾空格，可以加上 .filter(Boolean) 或 .map(s => s.trim())\n  // 例如：const data = [...arr1, ...arr2].filter(item => item.trim() !== '');\n\n  return {\n    addList: data\n  };\n}"
+        },
+        {
+          "key": "isCatchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": false
+        },
+        {
+          "key": "catchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "{}"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_addOutputParam",
+          "key": "system_addOutputParam",
+          "type": "dynamic",
+          "valueType": "dynamic",
+          "label": "",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "完整响应数据",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "mw9fzG8o2z1i",
+          "type": "dynamic",
+          "key": "addList",
+          "valueType": "arrayString",
+          "label": "addList",
+          "description": ""
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "b5Y9lVVpGIif",
+      "name": "会话操作",
+      "intro": "选择操作类型进行新增、删除、查询等操作",
+      "avatar": "/imgs/workflow/sessionIcon.svg",
+      "flowNodeType": "handleSession",
+      "showStatus": true,
+      "position": {
+        "x": 85.14650227541205,
+        "y": -335.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "operateType",
+          "label": "操作类型",
+          "renderTypeList": [
+            "select"
+          ],
+          "valueType": "string",
+          "list": [
+            {
+              "label": "新增",
+              "value": "add"
+            },
+            {
+              "label": "查询",
+              "value": "query"
+            },
+            {
+              "label": "删除",
+              "value": "delete"
+            }
+          ],
+          "value": "add",
+          "description": "操作类型",
+          "required": false
+        },
+        {
+          "key": "sessionName",
+          "renderTypeList": [
+            "promptInput"
+          ],
+          "valueType": "string",
+          "label": "会话名称",
+          "value": 3000,
+          "placeholder": "请输入会话名称",
+          "required": false
+        },
+        {
+          "key": "sessionId",
+          "renderTypeList": [
+            "promptInput"
+          ],
+          "valueType": "string",
+          "label": "会话ID",
+          "value": "{{$VARIABLE_NODE_ID.callId$}} {{$ENV_VARIABLE_NODE_ID.ADDRESS$}}",
+          "placeholder": "请输入会话ID",
+          "required": false
+        },
+        {
+          "key": "isSaveDb",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "boolean",
+          "label": "是否持久化",
+          "value": false,
+          "placeholder": "是否持久化",
+          "required": false
+        },
+        {
+          "key": "expire",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "过期时间",
+          "value": "180",
+          "placeholder": "请输入过期时间",
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "响应信息",
+          "description": "消息操作后到响应信息。",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "isSuccess",
+          "key": "isSuccess",
+          "label": "是否成功",
+          "description": "消息操作是否成功。",
+          "valueType": "boolean",
+          "type": "static"
+        },
+        {
+          "id": "isExisted",
+          "key": "isExisted",
+          "label": "是否已存在",
+          "description": "会话是否已存在。",
+          "valueType": "boolean",
+          "type": "static"
+        },
+        {
+          "id": "sessionId",
+          "key": "sessionId",
+          "label": "会话ID",
+          "description": "会话ID。",
+          "valueType": "string",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "nAHoKATFB9U6",
+      "name": "构建llm 消息",
+      "intro": "执行一段脚本代码，通常用于进行复杂的数据处理",
+      "avatar": "/imgs/workflow/code.svg",
+      "flowNodeType": "code",
+      "showStatus": true,
+      "position": {
+        "x": 985.1465022754121,
+        "y": -335.1965473647891
+      },
+      "version": "v2",
+      "inputs": [
+        {
+          "key": "system_addInputParam",
+          "renderTypeList": [
+            "addInputParam"
+          ],
+          "valueType": "dynamic",
+          "label": "",
+          "required": false,
+          "description": "这些变量会作为代码的运行的输入参数",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "key": "pinyin",
+          "valueType": "string",
+          "label": "pinyin",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "448745",
+            "userChatInput"
+          ]
+        },
+        {
+          "key": "kdRecords",
+          "valueType": "arrayString",
+          "label": "kdRecords",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "kjz5uLBPQJLR",
+            "mw9fzG8o2z1i"
+          ]
+        },
+        {
+          "key": "matchedIndex",
+          "valueType": "string",
+          "label": "matchedIndex",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "matched_index"
+          ]
+        },
+        {
+          "key": "state",
+          "valueType": "string",
+          "label": "state",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "state"
+          ]
+        },
+        {
+          "renderTypeList": [
+            "reference"
+          ],
+          "valueType": "string",
+          "canEdit": true,
+          "key": "userInput",
+          "label": "userInput",
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "required": false,
+          "description": "",
+          "value": [
+            "448745",
+            "userChatInput"
+          ]
+        },
+        {
+          "key": "codeType",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": "py"
+        },
+        {
+          "key": "isNewVersion",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": true
+        },
+        {
+          "key": "code",
+          "renderTypeList": [
+            "custom"
+          ],
+          "required": false,
+          "label": "",
+          "value": "import re\nimport json\n\ndef main(args: dict) -> dict:\n    try:\n        import pypinyin\n        has_pinyin = True\n    except ImportError:\n        has_pinyin = False\n\n    user_input = (args.get(\"userInput\") or \"\").strip()\n    state = (args.get(\"state\") or \"matching\").strip()\n    matched_index = args.get(\"matchedIndex\", -1)\n    last_unmatched_address = (args.get(\"last_unmatched_address\") or \"\").strip()\n\n    try:\n        similar_no_match_count = int(args.get(\"similar_no_match_count\") or 0)\n    except (ValueError, TypeError):\n        similar_no_match_count = 0\n\n    def clean_prefix(text):\n        if not text:\n            return \"\"\n        text = str(text).strip()\n        text = re.sub(r\"\\s+\", \"\", text)\n        text = re.sub(r\"^(我的|我是|在|大概在|就|那个|地址是)\", \"\", text)\n        text = re.sub(r\"^(?:河北省?|石家庄市?)+\", \"\", text)\n\n        admin_regions = [\n            \"长安区\", \"桥西区\", \"新华区\", \"裕华区\", \"井陉矿区\", \"藁城区\", \"鹿泉区\", \"栾城区\",\n            \"井陉县\", \"正定县\", \"行唐县\", \"灵寿县\", \"赞皇县\", \"平山县\", \"元氏县\", \"赵县\",\n            \"晋州市\", \"新乐市\", \"高新区\", \"开发区\"\n        ]\n        admin_regions.sort(key=len, reverse=True)\n\n        for region in admin_regions:\n            if text.startswith(region):\n                text = text[len(region):]\n                break\n\n        return text.strip()\n\n    def extract_effective_input(text):\n        normalized = clean_prefix(text)\n        if not normalized:\n            return \"\"\n\n        corrected = re.sub(\n            r\"^(?:不对(?:了)?|不是(?:的)?|不对不对|不是不是)[,，、\\s]*(?:是|应该是|而是)?\",\n            \"\",\n            normalized\n        )\n        corrected = re.sub(r\"^(?:我说的是|应该是|正确的是)\", \"\", corrected)\n        corrected = corrected.strip()\n        return corrected if corrected else normalized\n\n    def normalize_text(text):\n        text = str(text or \"\").strip()\n        text = re.sub(r\"\\[拼音:.*?\\]\", \"\", text)\n        text = text.replace(\"#\", \"号\")\n        text = re.sub(r\"[^\\u4e00-\\u9fa5A-Za-z0-9]\", \"\", text)\n        return text.lower()\n\n    def is_fragment_input(text):\n        t = normalize_text(text)\n        if not t:\n            return False\n\n        has_detail = bool(re.search(\n            r\"(小区|花园|公寓|大厦|苑|村|路|大道|巷|胡同|街|栋|幢|座|单元|室|号楼|号院|\\d+号|\\d+栋|\\d+单元|\\d+室|\\d{3,6})\",\n            t\n        ))\n\n        t_for_region = re.sub(r\"(小区|园区|校区|景区|社区|厂区|公寓|大厦|花园|苑)\", \"\", t)\n\n        has_broad_region = bool(re.search(\n            r\"(?:[\\u4e00-\\u9fa5]{2,12}(?:省|市|县|旗|镇|乡|街道))|(?:[\\u4e00-\\u9fa5]{2,12}区(?![路街巷村]))\",\n            t_for_region\n        ))\n\n        return has_detail and not has_broad_region\n\n    def merge_with_previous_address(prev_text, curr_text):\n        prev_text = str(prev_text or \"\").strip()\n        curr_text = str(curr_text or \"\").strip()\n\n        if not curr_text:\n            return \"\"\n        if not prev_text:\n            return curr_text\n\n        prev_norm = normalize_text(prev_text)\n        curr_norm = normalize_text(curr_text)\n\n        if curr_norm == prev_norm:\n            return prev_text\n\n        if curr_norm and curr_norm in prev_norm:\n            return prev_text\n\n        if prev_norm and prev_norm in curr_norm:\n            return curr_text\n\n        if is_fragment_input(curr_text):\n            return f\"{prev_text}{curr_text}\"\n\n        return curr_text\n\n    kd_records = args.get(\"addList\") or args.get(\"kdRecords\") or []\n    if not isinstance(kd_records, list):\n        kd_records = []\n\n    raw_clean_input = clean_prefix(user_input)\n    clean_input = extract_effective_input(user_input)\n\n    effective_match_input = merge_with_previous_address(last_unmatched_address, clean_input)\n\n    is_supplement_fragment = (\n        bool(last_unmatched_address)\n        and normalize_text(effective_match_input) != normalize_text(clean_input)\n    )\n\n    is_address_correction = bool(clean_input) and clean_input != raw_clean_input\n    prompt_state = \"matching\" if state == \"completed\" and is_address_correction else state\n\n    context_parts = [f\"[Context] state={prompt_state}\"]\n    try:\n        matched_index_int = int(matched_index)\n    except (ValueError, TypeError):\n        matched_index_int = -1\n\n    if matched_index_int >= 0 and prompt_state != \"matching\":\n        context_parts.append(f\"matched_index={matched_index_int}\")\n\n    if last_unmatched_address:\n        context_parts.append(f\"last_unmatched_address={last_unmatched_address}\")\n        if has_pinyin:\n            prev_pys = pypinyin.pinyin(last_unmatched_address, heteronym=False, style=pypinyin.NORMAL)\n            prev_py_str = \" \".join([p[0] for p in prev_pys]) if prev_pys else \"\"\n            if prev_py_str:\n                context_parts.append(f\"last_unmatched_pinyin={prev_py_str}\")\n\n    if similar_no_match_count > 0:\n        context_parts.append(f\"similar_no_match_count={similar_no_match_count}\")\n\n    def get_base_community(address):\n        match = re.split(r\"([A-Za-z\\d\\-]*\\d+[#号栋单元层室]|第?\\d+[#号栋单元层室])\", address)\n        if len(match) > 1:\n            base = match[0].strip()\n            base = re.sub(r\"[A-Za-z\\-]+$\", \"\", base).strip()\n            return base if base else address\n        return address\n\n    raw_clean_recs = []\n    bases = []\n    for record in kd_records:\n        record_str = str(record)\n        clean_rec = clean_prefix(record_str)\n        raw_clean_recs.append((record_str, clean_rec))\n        bases.append(get_base_community(clean_rec))\n\n    base_counts = {}\n    for b in bases:\n        base_counts[b] = base_counts.get(b, 0) + 1\n\n    clean_records_info = []\n    pinyin_hints = []\n\n    for i, (record_str, clean_rec) in enumerate(raw_clean_recs):\n        b = bases[i]\n        if base_counts[b] == 1:\n            clean_rec = b\n\n        py_str = \"\"\n        if has_pinyin and clean_rec:\n            rec_pys = pypinyin.pinyin(clean_rec, heteronym=False, style=pypinyin.NORMAL)\n            py_str = \" \".join([p[0] for p in rec_pys]) if rec_pys else \"\"\n\n        clean_records_info.append({\n            \"original\": record_str,\n            \"clean_address\": clean_rec,\n            \"pinyin\": py_str\n        })\n\n    if clean_records_info:\n        context_parts.append(f\"candidates_info={json.dumps(clean_records_info, ensure_ascii=False)}\")\n\n    context_text = \", \".join(context_parts)\n\n    if is_address_correction:\n        context_text += f\"\\n[System Hint] 用户正在纠正上一条地址，本轮有效地址片段更可能是: {clean_input}。如当前状态不是matching，请按新的匹配请求处理。\"\n\n    pinyin_source_input = clean_input\n    if has_pinyin and pinyin_source_input and not is_supplement_fragment:\n        t1 = re.sub(r\"[^\\w\\u4e00-\\u9fff]+\", \"\", pinyin_source_input)\n        if t1:\n            user_pys = [set(p) for p in pypinyin.pinyin(t1, heteronym=True, style=pypinyin.NORMAL)]\n            n_u = len(user_pys)\n\n            if n_u >= 2:\n                for rec_info in clean_records_info:\n                    record_str = rec_info[\"original\"]\n                    clean_rec = rec_info[\"clean_address\"]\n\n                    t2 = re.sub(r\"[^\\w\\u4e00-\\u9fff]+\", \"\", clean_rec)\n                    if not t2:\n                        continue\n\n                    record_pys = [set(p) for p in pypinyin.pinyin(t2, heteronym=True, style=pypinyin.NORMAL)]\n                    n_r = len(record_pys)\n\n                    is_match = False\n                    if 0 < n_u <= n_r:\n                        for i_r in range(n_r - n_u + 1):\n                            if all((user_pys[j] & record_pys[i_r + j]) for j in range(n_u)):\n                                is_match = True\n                                break\n                    elif 0 < n_r <= n_u:\n                        for i_u in range(n_u - n_r + 1):\n                            if all((record_pys[j] & user_pys[i_u + j]) for j in range(n_r)):\n                                is_match = True\n                                break\n\n                    if is_match:\n                        pinyin_hints.append(record_str)\n\n    if pinyin_hints:\n        pinyin_hints = list(dict.fromkeys(pinyin_hints))\n        context_text += f\"\\n[System Hint] 根据拼音(多音字)直接匹配，用户可能是在说这些地址之一: {', '.join(pinyin_hints)}\"\n\n    semantic_hints = []\n    if re.search(r\"\\d+\\s*#\", user_input):\n        semantic_hints.append(\"用户输入中的“数字#”表示楼栋/栋座标记，例如“10#101”应理解为“10号楼101”，不要匹配成“10号门”。\")\n    if re.search(r\"\\d+\\s*号\\s*门\", user_input):\n        semantic_hints.append(\"用户输入中的“数字号门”表示门或入口位置，不表示楼栋号，不能与“数字#”“数字号楼”“数字栋”互认。\")\n    if semantic_hints:\n        context_text += f\"\\n[System Hint] {' '.join(semantic_hints)}\"\n\n    if last_unmatched_address and effective_match_input != clean_input:\n        context_text += (\n            f\"\\n[System Hint] 用户本轮更像是在补充上一轮未匹配地址，请优先将 \"\n            f\"last_unmatched_address 与本轮片段合并理解。本轮合并后地址更可能是: {effective_match_input}。\"\n            f\" 若合并后地址与候选存在明显地域冲突，请忽略仅凭本轮片段得到的拼音直匹配。\"\n        )\n\n    effective_user_input = effective_match_input or clean_input or user_input\n    combined = f\"{context_text}\\nUser: {effective_user_input}\" if effective_user_input else context_text\n\n    # 关键：补充片段场景下，历史里保存拼接后的完整地址\n    history_base = effective_match_input if is_supplement_fragment else (clean_input or user_input)\n    history_msg = history_base\n    if has_pinyin and history_msg:\n        raw_pys = pypinyin.pinyin(history_msg, heteronym=False, style=pypinyin.NORMAL)\n        user_py_str = \" \".join([p[0] for p in raw_pys]) if raw_pys else \"\"\n        if user_py_str:\n            history_msg = f\"{history_msg} [拼音: {user_py_str}]\"\n\n    return {\n        \"user_message\": combined,\n        \"history_user_message\": history_msg,\n        \"clean_user_input\": clean_input,\n        \"effective_match_input\": effective_match_input\n    }\n"
+        },
+        {
+          "key": "isCatchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": false
+        },
+        {
+          "key": "catchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "{}"
+        },
+        {
+          "key": "last_unmatched_address",
+          "valueType": "string",
+          "label": "last_unmatched_address",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "last_unmatched_address"
+          ]
+        },
+        {
+          "key": "similar_no_match_count",
+          "valueType": "number",
+          "label": "similar_no_match_count",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "similar_no_match_count"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_addOutputParam",
+          "key": "system_addOutputParam",
+          "type": "dynamic",
+          "valueType": "dynamic",
+          "label": "",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "完整响应数据",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "z9jDFnN2Ec89",
+          "type": "dynamic",
+          "key": "user_message",
+          "valueType": "string",
+          "label": "user_message",
+          "description": ""
+        },
+        {
+          "id": "j2f1uV19a0Hn",
+          "type": "dynamic",
+          "key": "clean_user_input",
+          "valueType": "string",
+          "label": "clean_user_input",
+          "description": ""
+        },
+        {
+          "id": "fjISS1cAwKGb",
+          "type": "dynamic",
+          "key": "history_user_message",
+          "valueType": "string",
+          "label": "history_user_message",
+          "description": ""
+        },
+        {
+          "id": "uE1MgYMEQjtK",
+          "type": "dynamic",
+          "key": "effective_match_input",
+          "valueType": "string",
+          "label": "effective_match_input",
+          "description": ""
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "k4JqqLZPDVUu",
+      "name": "消息操作",
+      "intro": "选择操作类型进行新增、删除、查询等操作",
+      "avatar": "/imgs/workflow/messageIcon.svg",
+      "flowNodeType": "handleMessage",
+      "showStatus": true,
+      "position": {
+        "x": 1435.146502275412,
+        "y": -335.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "operateType",
+          "label": "操作类型",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "value": "query",
+          "description": "操作类型",
+          "required": false
+        },
+        {
+          "key": "sessionId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "会话ID",
+          "value": "{{$VARIABLE_NODE_ID.callId$}} {{$ENV_VARIABLE_NODE_ID.ADDRESS$}}",
+          "placeholder": "请输入会话ID",
+          "required": false
+        },
+        {
+          "key": "messageId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息ID",
+          "value": "",
+          "placeholder": "请输入消息ID",
+          "required": false
+        },
+        {
+          "key": "limit",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "查询条数",
+          "placeholder": "消息列表数量",
+          "required": false,
+          "value": ""
+        },
+        {
+          "key": "messageRole",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "角色",
+          "value": "",
+          "placeholder": "角色",
+          "required": false
+        },
+        {
+          "key": "toolName",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "工具名称",
+          "value": "",
+          "placeholder": "请输入工具名称",
+          "required": false
+        },
+        {
+          "key": "messageContent",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息内容",
+          "value": 3000,
+          "placeholder": "消息内容",
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "响应信息",
+          "description": "消息操作后到响应信息。",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "messageList",
+          "key": "messageList",
+          "label": "消息列表",
+          "description": "查询到的消息列表。",
+          "valueType": "chatHistory",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "w5fdGKlksBNk",
+      "name": "llm后处理",
+      "intro": "执行一段脚本代码，通常用于进行复杂的数据处理",
+      "avatar": "/imgs/workflow/code.svg",
+      "flowNodeType": "code",
+      "showStatus": true,
+      "position": {
+        "x": 2335.146502275412,
+        "y": -335.6965473647891
+      },
+      "version": "v2",
+      "inputs": [
+        {
+          "key": "system_addInputParam",
+          "renderTypeList": [
+            "addInputParam"
+          ],
+          "valueType": "dynamic",
+          "label": "",
+          "required": false,
+          "description": "这些变量会作为代码的运行的输入参数",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "key": "matched_index",
+          "valueType": "number",
+          "label": "matched_index",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "matched_index"
+          ]
+        },
+        {
+          "key": "state",
+          "valueType": "string",
+          "label": "state",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "state"
+          ]
+        },
+        {
+          "key": "meaningless_result",
+          "valueType": "object",
+          "label": "meaningless_result",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "hQWemluC40nu",
+            "structuredOutput"
+          ]
+        },
+        {
+          "renderTypeList": [
+            "reference"
+          ],
+          "valueType": "object",
+          "canEdit": true,
+          "key": "llm_result",
+          "label": "llm_result",
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "required": false,
+          "description": "",
+          "value": [
+            "yRzbOXFDXOJd",
+            "structuredOutput"
+          ]
+        },
+        {
+          "key": "codeType",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": "py"
+        },
+        {
+          "key": "isNewVersion",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": true
+        },
+        {
+          "key": "clean_user_input",
+          "valueType": "string",
+          "label": "clean_user_input",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "nAHoKATFB9U6",
+            "uE1MgYMEQjtK"
+          ]
+        },
+        {
+          "key": "last_unmatched_address",
+          "valueType": "string",
+          "label": "last_unmatched_address",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "last_unmatched_address"
+          ]
+        },
+        {
+          "key": "similar_no_match_count",
+          "valueType": "number",
+          "label": "similar_no_match_count",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "similar_no_match_count"
+          ]
+        },
+        {
+          "key": "address_list",
+          "valueType": "arrayString",
+          "label": "address_list",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "kjz5uLBPQJLR",
+            "mw9fzG8o2z1i"
+          ]
+        },
+        {
+          "key": "code",
+          "renderTypeList": [
+            "custom"
+          ],
+          "required": false,
+          "label": "",
+          "value": "import re\nfrom difflib import SequenceMatcher\n\ndef main(\n    llm_result: dict,\n    meaningless_result: dict = None,\n    state: str = \"matching\",\n    matched_index: int = -1,\n    clean_user_input: str = \"\",\n    last_unmatched_address: str = \"\",\n    similar_no_match_count: int = 0,\n    address_list: list = None\n) -> dict:\n    if not isinstance(llm_result, dict):\n        llm_result = {}\n    if not isinstance(meaningless_result, dict):\n        meaningless_result = {}\n    if not isinstance(address_list, list):\n        address_list = []\n\n    def _to_int(value, default):\n        try:\n            return int(value) if value is not None else default\n        except (ValueError, TypeError):\n            return default\n\n    def _to_bool(value, default=False):\n        if isinstance(value, bool):\n            return value\n        if isinstance(value, (int, float)):\n            return bool(value)\n        if isinstance(value, str):\n            normalized = value.strip().lower()\n            if normalized in {\"true\", \"1\", \"yes\", \"y\", \"是\", \"对\"}:\n                return True\n            if normalized in {\"false\", \"0\", \"no\", \"n\", \"否\", \"不是\", \"\"}:\n                return False\n        return default\n\n    def _to_str(value, default=\"\"):\n        if value is None:\n            return default\n        return str(value).strip()\n\n    def _normalize_text(text: str) -> str:\n        text = _to_str(text)\n        text = re.sub(r\"\\[拼音:.*?\\]\", \"\", text)\n        text = text.replace(\"#\", \"号\")\n        text = re.sub(r\"[^\\u4e00-\\u9fa5A-Za-z0-9]\", \"\", text)\n        return text.lower().strip()\n\n    def _contains_any(text: str, words) -> bool:\n        return any(word in text for word in words)\n\n    def _looks_like_address(text: str) -> bool:\n        t = _normalize_text(text)\n        if not t:\n            return False\n\n        address_markers = [\n            \"省\", \"市\", \"区\", \"县\", \"旗\",\n            \"镇\", \"乡\", \"街道\", \"街\", \"路\", \"大道\", \"巷\", \"胡同\",\n            \"小区\", \"花园\", \"公寓\", \"大厦\", \"苑\", \"村\",\n            \"栋\", \"幢\", \"座\", \"单元\", \"室\", \"号楼\", \"号院\", \"弄\", \"里\"\n        ]\n        if _contains_any(t, address_markers):\n            return True\n\n        if re.search(r\"\\d+(号|栋|幢|座|单元|室|号楼|号院)\", t):\n            return True\n\n        return False\n\n    def _has_effective_address(text: str) -> bool:\n        t = _normalize_text(text)\n        if not t:\n            return False\n\n        effective_markers = [\n            \"小区\", \"花园\", \"公寓\", \"大厦\", \"苑\", \"村\",\n            \"镇\", \"乡\", \"街道\", \"街\", \"路\", \"大道\", \"巷\", \"胡同\",\n            \"栋\", \"幢\", \"座\", \"单元\", \"室\", \"号楼\", \"号院\", \"弄\", \"里\"\n        ]\n        if _contains_any(t, effective_markers):\n            return True\n\n        if re.search(r\"\\d+(号|栋|幢|座|单元|室|号楼|号院)\", t):\n            return True\n\n        return False\n\n    def _is_layer_missing(text: str) -> bool:\n        t = _normalize_text(text)\n        if not t:\n            return False\n\n        if _has_effective_address(text):\n            return False\n\n        if _contains_any(t, [\"省\", \"市\", \"区\", \"县\", \"旗\"]):\n            return True\n\n        return False\n\n    def _needs_specific_place_followup(text: str) -> bool:\n        t = _normalize_text(text)\n        if not t:\n            return False\n\n        if re.search(\n            r\"(小区|花园|公寓|大厦|苑|村|路|大道|巷|胡同|街(?!道)|栋|幢|座|单元|室|号楼|号院|弄|里|\\d+号|\\d+栋|\\d+单元|\\d+室)\",\n            t\n        ):\n            return False\n\n        return bool(re.search(r\"(省|市|区|县|旗|镇|乡|街道)\", t))\n\n    def _is_exact_layer_reply(text: str) -> bool:\n        text = _to_str(text)\n        return text == \"\\u597d\\u7684\\uff0c\\u8bf7\\u60a8\\u518d\\u8bf4\\u4e00\\u4e0b\\u5177\\u4f53\\u7684\\u5c0f\\u533a\\u6216\\u6751\\u9547\\u540d\\u79f0\\u3002\"\n\n    def _is_similar(a: str, b: str) -> bool:\n        na, nb = _normalize_text(a), _normalize_text(b)\n        if not na or not nb:\n            return False\n        if na == nb or na in nb or nb in na:\n            return True\n        return SequenceMatcher(None, na, nb).ratio() >= 0.78\n\n    def _token_overlap(a_list, b_list):\n        if not a_list or not b_list:\n            return False\n        for a in a_list:\n            for b in b_list:\n                na, nb = _normalize_text(a), _normalize_text(b)\n                if na == nb or na in nb or nb in na:\n                    return True\n                if SequenceMatcher(None, na, nb).ratio() >= 0.8:\n                    return True\n        return False\n\n    def _has_strong_conflict(user_text: str, candidate_text: str) -> bool:\n        user_text = _to_str(user_text)\n        candidate_text = _to_str(candidate_text)\n        if not user_text or not candidate_text:\n            return False\n\n        patterns = {\n            \"prov_city\": r\"[\\u4e00-\\u9fa5]{2,12}(?:省|市)\",\n            \"district\": r\"[\\u4e00-\\u9fa5]{2,12}(?:区|县|旗)\",\n            \"town\": r\"[\\u4e00-\\u9fa5]{2,12}(?:镇|乡|街道|街)\",\n            \"road\": r\"[\\u4e00-\\u9fa5]{2,20}(?:路|大道|巷|胡同)\",\n            \"community\": r\"[\\u4e00-\\u9fa5]{2,20}(?:小区|花园|公寓|大厦|苑|村)\"\n        }\n\n        mismatch_count = 0\n        for _, pattern in patterns.items():\n            u_tokens = re.findall(pattern, user_text)\n            c_tokens = re.findall(pattern, candidate_text)\n            if u_tokens and c_tokens and not _token_overlap(u_tokens, c_tokens):\n                mismatch_count += 1\n\n        user_build = re.findall(r\"(\\d+)(?:栋|幢|座|号楼|号)\", user_text)\n        cand_build = re.findall(r\"(\\d+)(?:栋|幢|座|号楼|号)\", candidate_text)\n        if user_build and cand_build and not (set(user_build) & set(cand_build)):\n            mismatch_count += 1\n\n        user_room = re.findall(r\"(?<!\\d)(\\d{3,6})(?!\\d)\", user_text)\n        cand_room = re.findall(r\"(?<!\\d)(\\d{3,6})(?!\\d)\", candidate_text)\n        if user_room and cand_room and not (set(user_room) & set(cand_room)):\n            mismatch_count += 1\n\n        return mismatch_count >= 2\n\n    def _strip_broad_region_prefix(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n\n        pattern = re.compile(\n            r\"[\\u4e00-\\u9fa5A-Za-z0-9]{2,12}(?:省|市|县|旗|镇|乡|街道)\"\n        )\n\n        last_end = 0\n        for m in pattern.finditer(text):\n            last_end = m.end()\n\n        if last_end and last_end < len(text):\n            return text[last_end:]\n        return text\n\n    def _extract_community_name(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n\n        stripped = _strip_broad_region_prefix(text)\n\n        matches = []\n        pattern = re.compile(\n            r\"(?=([\\u4e00-\\u9fa5A-Za-z0-9]{2,20}(?:小区|花园|公寓|大厦|苑|村)))\"\n        )\n\n        for m in pattern.finditer(stripped):\n            seg = m.group(1)\n            if seg:\n                matches.append(seg)\n\n        if not matches:\n            return \"\"\n\n        matches = sorted(set(matches), key=len)\n        return matches[0]\n\n    def _extract_city_prefix(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n\n        m = re.search(r\"^([\\u4e00-\\u9fa5A-Za-z0-9]{2,20}?(?:省)?[\\u4e00-\\u9fa5A-Za-z0-9]{2,12}市)\", text)\n        return m.group(1) if m else \"\"\n\n    def _extract_building_name(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n        m = re.search(r\"(\\d+(?:栋|幢|座|号楼|楼))\", text)\n        return m.group(1) if m else \"\"\n\n    def _extract_unit_name(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n        m = re.search(r\"(\\d+单元)\", text)\n        return m.group(1) if m else \"\"\n\n    def _extract_room_name(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n\n        m = re.search(r\"(\\d+室)\", text)\n        if m:\n            return m.group(1)\n\n        tmp = re.sub(r\"\\d+(?:栋|幢|座|号楼|楼)\", \"\", text)\n        tmp = re.sub(r\"\\d+单元\", \"\", tmp)\n        nums = re.findall(r\"(?<!\\d)(\\d{3,6})(?!\\d)\", tmp)\n        return nums[-1] if nums else \"\"\n\n    def _is_fragment_like(text: str) -> bool:\n        t = _normalize_text(text)\n        if not t:\n            return False\n\n        has_detail = bool(re.search(\n            r\"(小区|花园|公寓|大厦|苑|村|路|大道|巷|胡同|街|栋|幢|座|单元|室|号楼|号院|\\d+号|\\d+栋|\\d+单元|\\d+室)\",\n            t\n        ))\n        has_broad_region = bool(re.search(\n            r\"(省|市|县|旗|镇|乡|街道)\",\n            t\n        ))\n        return has_detail and not has_broad_region\n\n    def _is_extension_of_previous(curr: str, prev: str) -> bool:\n        ncur, nprev = _normalize_text(curr), _normalize_text(prev)\n        return bool(nprev and ncur.startswith(nprev) and len(ncur) > len(nprev))\n\n    def _extract_road_name(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n\n        stripped = _strip_broad_region_prefix(text)\n        community = _extract_community_name(stripped)\n        if community and community in stripped:\n            stripped = stripped[stripped.index(community) + len(community):]\n\n        matches = []\n        pattern = re.compile(\n            r\"(?=([\\u4e00-\\u9fa5A-Za-z0-9]{1,20}(?:\\u5927\\u9053|\\u8def|\\u5df7|\\u80e1\\u540c|\\u8857(?!\\u9053))))\"\n        )\n\n        for m in pattern.finditer(stripped):\n            seg = m.group(1)\n            if seg:\n                matches.append(seg)\n\n        if not matches:\n            return \"\"\n\n        matches = sorted(set(matches), key=len)\n        return matches[0]\n\n    def _extract_house_name(text: str) -> str:\n        text = _to_str(text)\n        if not text:\n            return \"\"\n\n        m = re.search(\"(\\\\d+\\u53f7\\u9662|\\\\d+\\u53f7(?!\\u697c|\\u680b|\\u5e62|\\u5355\\u5143|\\u5ba4)|\\\\d+\\u5f04|\\\\d+\\u91cc)\", text)\n        return m.group(1) if m else \"\"\n\n    def _extract_address_prefix(text: str, anchor: str) -> str:\n        text = _to_str(text)\n        anchor = _to_str(anchor)\n        if not text or not anchor:\n            return \"\"\n\n        idx = text.find(anchor)\n        if idx >= 0:\n            return text[:idx]\n        return \"\"\n\n    def _build_recorded_address(\n        current_input: str,\n        prev_unmatched: str,\n        fallback_text: str = \"\"\n    ) -> str:\n        current_input = _to_str(current_input)\n        prev_unmatched = _to_str(prev_unmatched)\n        fallback_text = _to_str(fallback_text)\n\n        return current_input or prev_unmatched or fallback_text\n\n    def _build_precise_followup(prev_unmatched: str, current_input: str, address_list: list):\n        if not isinstance(address_list, list) or len(address_list) < 2:\n            return \"\", \"\"\n\n        normalized_addresses = []\n        for addr in address_list:\n            addr_text = _to_str(addr)\n            if addr_text:\n                normalized_addresses.append(addr_text)\n\n        if len(normalized_addresses) < 2:\n            return \"\", \"\"\n\n        user_fragment = current_input\n        if _is_extension_of_previous(current_input, prev_unmatched):\n            user_fragment = current_input[len(prev_unmatched):]\n\n        user_community = _extract_community_name(user_fragment) or _extract_community_name(current_input)\n        current_road = _extract_road_name(current_input)\n        current_building = _extract_building_name(current_input)\n        current_unit = _extract_unit_name(current_input)\n        current_room = _extract_room_name(current_input)\n        current_house = _extract_house_name(current_input)\n\n        # ????/?/?/????????????????????\n        if not any([user_community, current_road, current_building, current_unit, current_room, current_house]):\n            return \"\", \"\"\n\n        filtered = normalized_addresses\n        if user_community:\n            community_filtered = []\n            target_norm = _normalize_text(user_community)\n            for addr in filtered:\n                addr_community = _extract_community_name(addr)\n                if addr_community and _is_similar(addr_community, user_community):\n                    community_filtered.append(addr)\n                elif target_norm and target_norm in _normalize_text(addr):\n                    community_filtered.append(addr)\n            if community_filtered:\n                filtered = community_filtered\n\n        candidate_communities = list(dict.fromkeys([\n            c for c in (_extract_community_name(addr) for addr in filtered) if c\n        ]))\n\n        if user_community:\n            if not candidate_communities:\n                return \"\", \"\"\n            candidate_community = candidate_communities[0]\n        else:\n            if len(candidate_communities) != 1:\n                return \"\", \"\"\n            candidate_community = candidate_communities[0]\n\n        if user_community and not _is_similar(user_community, candidate_community):\n            if not (prev_unmatched and len(candidate_communities) == 1):\n                return \"\", \"\"\n\n        if current_road:\n            road_filtered = []\n            road_norm = _normalize_text(current_road)\n            for addr in filtered:\n                addr_road = _extract_road_name(addr)\n                if addr_road and (_is_similar(addr_road, current_road) or road_norm in _normalize_text(addr)):\n                    road_filtered.append(addr)\n            if road_filtered:\n                filtered = road_filtered\n\n        if current_building:\n            filtered = [addr for addr in filtered if _extract_building_name(addr) == current_building]\n            if not filtered:\n                return \"\", \"\"\n\n        if current_unit:\n            filtered = [addr for addr in filtered if _extract_unit_name(addr) == current_unit]\n            if not filtered:\n                return \"\", \"\"\n\n        if current_room:\n            return \"\", \"\"\n\n        candidate_buildings = list(dict.fromkeys([\n            b for b in (_extract_building_name(addr) for addr in filtered) if b\n        ]))\n        candidate_units = list(dict.fromkeys([\n            u for u in (_extract_unit_name(addr) for addr in filtered) if u\n        ]))\n        candidate_rooms = list(dict.fromkeys([\n            r for r in (_extract_room_name(addr) for addr in filtered) if r\n        ]))\n        candidate_roads = list(dict.fromkeys([\n            r for r in (_extract_road_name(addr) for addr in filtered) if r\n        ]))\n        candidate_houses = list(dict.fromkeys([\n            h for h in (_extract_house_name(addr) for addr in filtered) if h\n        ]))\n\n        place_is_village = candidate_community.endswith(\"\\u6751\")\n        reference_address = filtered[0] if filtered else normalized_addresses[0]\n\n        if current_building:\n            recorded_address = _build_recorded_address(\n                current_input,\n                prev_unmatched,\n                candidate_community\n            )\n\n            if current_unit and len(candidate_rooms) >= 2:\n                reply = f\"我记录的地址信息是：{recorded_address}，请您再提供下门牌号信息\"\n                return reply, recorded_address\n\n            if len(candidate_units) >= 2:\n                reply = f\"我记录的地址信息是：{recorded_address}，请您再提供下单元号及门牌号信息\"\n                return reply, recorded_address\n\n            if len(candidate_rooms) >= 2 or len(filtered) >= 2:\n                if current_unit:\n                    reply = f\"我记录的地址信息是：{recorded_address}，请您再提供下门牌号信息\"\n                else:\n                    reply = f\"我记录的地址信息是：{recorded_address}，请您再提供下单元号及门牌号信息\"\n                return reply, recorded_address\n\n            return \"\", \"\"\n\n        if current_road:\n            recorded_address = _build_recorded_address(\n                current_input,\n                prev_unmatched,\n                candidate_community\n            )\n\n            if current_house:\n                return \"\", \"\"\n\n            if len(candidate_houses) >= 2 or len(filtered) >= 2:\n                reply = f\"我记录的地址信息是：{recorded_address}，请您再提供下门牌号信息\"\n                return reply, recorded_address\n\n        if place_is_village or (not candidate_buildings and candidate_roads):\n            recorded_address = _build_recorded_address(\n                current_input,\n                prev_unmatched,\n                candidate_community\n            )\n            reply = f\"\\u6211\\u8bb0\\u5f55\\u7684\\u5730\\u5740\\u4fe1\\u606f\\u662f\\uff1a{recorded_address}\\uff0c\\u8bf7\\u60a8\\u518d\\u63d0\\u4f9b\\u4e0b\\u8857\\u9053\\u540d\\u79f0\\u53ca\\u95e8\\u724c\\u53f7\\u4fe1\\u606f\"\n            return reply, recorded_address\n\n        if len(candidate_buildings) == 1:\n            recorded_address = _build_recorded_address(\n                current_input,\n                prev_unmatched,\n                candidate_community\n            )\n            reply = f\"\\u6211\\u8bb0\\u5f55\\u7684\\u5730\\u5740\\u4fe1\\u606f\\u662f\\uff1a{recorded_address}\\uff0c\\u8bf7\\u60a8\\u518d\\u63d0\\u4f9b\\u4e0b\\u697c\\u680b\\u53f7\\u3001\\u5355\\u5143\\u53f7\\u53ca\\u95e8\\u724c\\u53f7\\u4fe1\\u606f\"\n            return reply, recorded_address\n\n        recorded_address = _build_recorded_address(\n                current_input,\n                prev_unmatched,\n                candidate_community\n            )\n        reply = f\"我记录的地址信息是：{recorded_address}，请您再提供下楼栋号、单元号及门牌号信息\"\n        return reply, recorded_address\n\n    current_state = (state or \"matching\").strip()\n    current_matched_index = -1 if current_state == \"matching\" else _to_int(matched_index, -1)\n\n    current_raw_input = _to_str(clean_user_input)\n    prev_unmatched = _to_str(last_unmatched_address)\n\n    current_input = current_raw_input\n    if prev_unmatched and current_raw_input and _is_fragment_like(current_raw_input):\n        ncur = _normalize_text(current_raw_input)\n        nprev = _normalize_text(prev_unmatched)\n\n        if ncur == nprev or ncur in nprev:\n            current_input = prev_unmatched\n        elif nprev and ncur.startswith(nprev):\n            current_input = current_raw_input\n        else:\n            current_input = f\"{prev_unmatched}{current_raw_input}\"\n\n    prev_repeat_count = max(_to_int(similar_no_match_count, 0), 0)\n\n    meaningless_flag = _to_bool(\n        meaningless_result.get(\n            \"is_meaningless\",\n            meaningless_result.get(\"meaningless\", meaningless_result.get(\"is_irrelevant\", False))\n        )\n    )\n    meaningless_reply = _to_str(meaningless_result.get(\"reply\"))\n\n    if meaningless_flag and current_input and _looks_like_address(current_input):\n        meaningless_flag = False\n        meaningless_reply = \"\"\n\n    if meaningless_flag:\n        if current_state == \"confirming\" and current_matched_index >= 0:\n            llm_result = {\n                \"match_count\": 1,\n                \"matched_index\": current_matched_index,\n                \"is_completed\": False,\n                \"is_extract_failed\": False,\n                \"reply\": \"\"\n            }\n        else:\n            llm_result = {\n                \"match_count\": 0,\n                \"matched_index\": -1,\n                \"is_completed\": False,\n                \"is_extract_failed\": False,\n                \"reply\": meaningless_reply or \"请您提供详细的地址信息\"\n            }\n        return {\n            \"llm_result\": llm_result,\n            \"next_last_unmatched_address\": prev_unmatched,\n            \"next_similar_no_match_count\": prev_repeat_count\n        }\n\n    match_count = max(_to_int(llm_result.get(\"match_count\"), 0), 0)\n    llm_matched_index = _to_int(llm_result.get(\"matched_index\"), -1)\n    is_completed = _to_bool(llm_result.get(\"is_completed\", False))\n    is_extract_failed = _to_bool(llm_result.get(\"is_extract_failed\", llm_result.get(\"extract_failed\", False)))\n    reply = _to_str(llm_result.get(\"reply\"))\n\n    strong_conflict_demoted = False\n\n    if llm_matched_index >= 0 and 0 <= llm_matched_index < len(address_list):\n        selected_address = _to_str(address_list[llm_matched_index])\n        if _has_strong_conflict(current_input, selected_address):\n            llm_matched_index = -1\n            match_count = 0\n            is_completed = False\n            reply = \"\"\n            strong_conflict_demoted = True\n\n    if strong_conflict_demoted and prev_unmatched and _is_similar(current_input, prev_unmatched) and not _is_extension_of_previous(current_input, prev_unmatched):\n        is_extract_failed = True\n        match_count = 0\n        llm_matched_index = -1\n        is_completed = False\n        reply = \"\"\n\n    if is_extract_failed:\n        match_count = 0\n        llm_matched_index = -1\n        is_completed = False\n        reply = \"\"\n\n    if match_count == 1 and llm_matched_index < 0:\n        if current_state == \"confirming\" and current_matched_index >= 0:\n            llm_matched_index = current_matched_index\n        else:\n            match_count = 0\n\n    if match_count >= 2 and llm_matched_index >= 0:\n        llm_matched_index = -1\n        is_completed = False\n\n    if is_completed and llm_matched_index < 0:\n        if current_state == \"confirming\" and current_matched_index >= 0:\n            llm_matched_index = current_matched_index\n            match_count = 1\n        else:\n            is_completed = False\n\n    if llm_matched_index >= 0 and match_count <= 0:\n        match_count = 1\n\n    next_last_unmatched_address = \"\"\n    next_similar_no_match_count = 0\n\n    current_looks_like_address = _looks_like_address(current_input)\n    current_is_layer_missing = _is_layer_missing(current_input)\n    current_has_effective_address = _has_effective_address(current_input)\n\n    custom_followup_reply = \"\"\n    custom_recorded_address = \"\"\n    if current_state == \"matching\" and llm_matched_index < 0 and match_count == 0 and not is_completed:\n        custom_followup_reply, custom_recorded_address = _build_precise_followup(\n            prev_unmatched,\n            current_input,\n            address_list\n        )\n\n    should_track_unmatched = (\n        current_state == \"matching\"\n        and llm_matched_index < 0\n        and match_count == 0\n        and not is_completed\n        and bool(current_input)\n        and current_looks_like_address\n    )\n\n    if should_track_unmatched:\n        if prev_unmatched and _is_similar(current_input, prev_unmatched) and not _is_extension_of_previous(current_input, prev_unmatched):\n            is_extract_failed = True\n            match_count = 0\n            llm_matched_index = -1\n            is_completed = False\n            reply = \"\"\n            next_last_unmatched_address = \"\"\n            next_similar_no_match_count = 0\n        else:\n            next_last_unmatched_address = custom_recorded_address or current_input\n            next_similar_no_match_count = 1\n    else:\n        if llm_matched_index >= 0 or is_completed:\n            next_last_unmatched_address = \"\"\n            next_similar_no_match_count = 0\n        else:\n            next_last_unmatched_address = prev_unmatched\n            next_similar_no_match_count = prev_repeat_count\n\n    REPLY_LAYER = \"好的，请您再说一下具体的小区或村镇名称。\"\n    REPLY_DETAIL = \"请您提供详细的地址信息\"\n    REPLY_CORRECT = \"请您提供正确完整的地址信息\"\n\n    reply_alias_map = {\n        \"好的，请您再说一下具体的小区或村镇名称\": REPLY_LAYER,\n        \"请您提供详细的地址信息。\": REPLY_DETAIL,\n        \"请您提供详细地址信息\": REPLY_DETAIL,\n        \"请您提供正确的地址信息\": REPLY_CORRECT,\n        \"请您提供正确的地址信息。\": REPLY_CORRECT,\n        \"请您提供正确完整的地址信息。\": REPLY_CORRECT\n    }\n    reply = reply_alias_map.get(reply, reply)\n\n    forbidden_matching_reply = \"好的，请您再重新说一下报修宽带所在小区或村镇名称。\"\n    if current_state == \"matching\" and reply == forbidden_matching_reply:\n        reply = \"\"\n\n    if current_state == \"matching\" and llm_matched_index < 0 and match_count == 0 and not is_completed:\n        if is_extract_failed:\n            reply = \"\"\n        elif custom_followup_reply:\n            reply = custom_followup_reply\n        elif reply in {REPLY_LAYER, REPLY_DETAIL, REPLY_CORRECT} or _is_exact_layer_reply(reply):\n            if _is_exact_layer_reply(reply) and current_input and _needs_specific_place_followup(current_input):\n                reply = f\"\\u6211\\u8bb0\\u5f55\\u7684\\u5730\\u5740\\u4fe1\\u606f\\u662f\\uff1a{current_input}\\uff0c\\u8bf7\\u60a8\\u518d\\u8bf4\\u4e00\\u4e0b\\u5177\\u4f53\\u7684\\u5c0f\\u533a\\u6216\\u6751\\u9547\\u540d\\u79f0\\u3002\"\n        else:\n            if not current_input:\n                reply = REPLY_DETAIL\n            elif current_is_layer_missing:\n                reply = REPLY_LAYER\n            elif current_looks_like_address:\n                reply = REPLY_CORRECT\n            else:\n                reply = REPLY_DETAIL\n\n    if current_state == \"confirming\" and current_matched_index >= 0:\n        if not is_completed and match_count <= 0 and llm_matched_index < 0 and not reply and not is_extract_failed:\n            llm_matched_index = current_matched_index\n            match_count = 1\n\n    if is_completed or is_extract_failed or (match_count == 1 and llm_matched_index >= 0):\n        reply = \"\"\n\n    llm_result[\"match_count\"] = match_count\n    llm_result[\"matched_index\"] = llm_matched_index\n    llm_result[\"is_completed\"] = is_completed\n    llm_result[\"is_extract_failed\"] = is_extract_failed\n    llm_result[\"reply\"] = reply\n\n    return {\n        \"llm_result\": llm_result,\n        \"next_last_unmatched_address\": next_last_unmatched_address,\n        \"next_similar_no_match_count\": next_similar_no_match_count\n    }\n\n\n\n"
+        },
+        {
+          "key": "isCatchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": false
+        },
+        {
+          "key": "catchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "{}"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_addOutputParam",
+          "key": "system_addOutputParam",
+          "type": "dynamic",
+          "valueType": "dynamic",
+          "label": "",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "完整响应数据",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "yStQQpHitgaJ",
+          "type": "dynamic",
+          "key": "llm_result",
+          "valueType": "any",
+          "label": "llm_result",
+          "description": ""
+        },
+        {
+          "id": "nextLastUnmatchedAddress",
+          "type": "dynamic",
+          "key": "next_last_unmatched_address",
+          "valueType": "string",
+          "label": "next_last_unmatched_address",
+          "description": ""
+        },
+        {
+          "id": "nextSimilarNoMatchCount",
+          "type": "dynamic",
+          "key": "next_similar_no_match_count",
+          "valueType": "number",
+          "label": "next_similar_no_match_count",
+          "description": ""
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "yuxc97TeaAbT",
+      "name": "#后处理状态",
+      "intro": "执行一段脚本代码，通常用于进行复杂的数据处理",
+      "avatar": "/imgs/workflow/code.svg",
+      "flowNodeType": "code",
+      "showStatus": true,
+      "position": {
+        "x": 2785.146502275412,
+        "y": -335.1965473647891
+      },
+      "version": "v2",
+      "inputs": [
+        {
+          "key": "system_addInputParam",
+          "renderTypeList": [
+            "addInputParam"
+          ],
+          "valueType": "dynamic",
+          "label": "",
+          "required": false,
+          "description": "这些变量会作为代码的运行的输入参数",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "key": "address",
+          "valueType": "arrayString",
+          "label": "address",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "kjz5uLBPQJLR",
+            "mw9fzG8o2z1i"
+          ]
+        },
+        {
+          "key": "state",
+          "valueType": "string",
+          "label": "state",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "CHAT_VARIABLE_NODE_ID",
+            "state"
+          ]
+        },
+        {
+          "renderTypeList": [
+            "reference"
+          ],
+          "valueType": "any",
+          "canEdit": true,
+          "key": "data",
+          "label": "data",
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "required": false,
+          "description": "",
+          "value": [
+            "w5fdGKlksBNk",
+            "yStQQpHitgaJ"
+          ]
+        },
+        {
+          "key": "codeType",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": "py"
+        },
+        {
+          "key": "isNewVersion",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": true
+        },
+        {
+          "key": "code",
+          "renderTypeList": [
+            "custom"
+          ],
+          "required": false,
+          "label": "",
+          "value": "# 后处理状态\ndef main(data: dict, address: list = None, state: str = \"matching\") -> dict:\n    \"\"\"\n    根据 LLM 返回结果和当前状态驱动状态流转。\n    新规则：\n    1. 唯一匹配 -> confirming\n    2. 用户明确确认(is_completed=true) -> completed\n    3. 普通未匹配/多匹配 -> 继续 matching\n    4. 连续相似错误地址导致提取失败(is_extract_failed=true) -> match_failed=True\n    \"\"\"\n    if not isinstance(data, dict):\n        data = {}\n    if address is None:\n        address = []\n\n    is_completed = False\n    clean_history = False\n\n    # === 1. 上下文状态解析 ===\n    prev_state = (state or \"matching\").strip()\n    prev_matched_account = str(data.get(\"matched_account\", \"\") or \"\").strip()\n\n    def _to_int(value, default):\n        try:\n            return int(value) if value is not None else default\n        except (ValueError, TypeError):\n            return default\n\n    def _to_bool(value, default=False):\n        if isinstance(value, bool):\n            return value\n        if isinstance(value, (int, float)):\n            return bool(value)\n        if isinstance(value, str):\n            normalized = value.strip().lower()\n            if normalized in {\"true\", \"1\", \"yes\", \"y\", \"是\", \"对\"}:\n                return True\n            if normalized in {\"false\", \"0\", \"no\", \"n\", \"否\", \"不是\", \"\"}:\n                return False\n        return default\n\n    # === 2. LLM 返回结果读取 ===\n    matched_index = _to_int(data.get(\"matched_index\"), -1)\n    match_count = max(_to_int(data.get(\"match_count\"), 0), 0)\n    llm_is_completed = _to_bool(data.get(\"is_completed\", False))\n    is_extract_failed = _to_bool(\n        data.get(\"is_extract_failed\", data.get(\"extract_failed\", False))\n    )\n\n    # 安全获取候选地址\n    def _get_account(idx: int) -> str:\n        if address and 0 <= idx < len(address):\n            return str(address[idx])\n        return \"\"\n\n    # === 3. 一致性修正 ===\n\n    # 提取失败优先级最高：强制视为未命中\n    if is_extract_failed:\n        matched_index = -1\n        match_count = 0\n        llm_is_completed = False\n\n    # 多匹配时不允许带唯一索引\n    if match_count >= 2:\n        matched_index = -1\n        llm_is_completed = False\n\n    # 有唯一索引但数量异常，修正为唯一匹配\n    if matched_index >= 0 and match_count <= 0:\n        match_count = 1\n\n    # 声称唯一匹配但没有索引，降级为未匹配\n    if match_count == 1 and matched_index < 0:\n        match_count = 0\n\n    # 声称完成但没有有效索引，阻断\n    if llm_is_completed and matched_index < 0:\n        llm_is_completed = False\n\n    # === 4. 核心状态流转 ===\n\n    # 场景A：提取失败（终态失败）\n    if is_extract_failed:\n        out_state = \"matching\"\n        out_matched_index = -1\n        out_matched_account = \"\"\n        out_match_failed = True\n        is_completed = False\n        clean_history = True\n\n    # 场景B：用户在 confirming 阶段明确确认\n    elif llm_is_completed and matched_index >= 0:\n        out_state = \"completed\"\n        out_matched_index = matched_index\n        out_matched_account = _get_account(matched_index) or prev_matched_account\n        out_match_failed = False\n        is_completed = True\n\n    # 场景C：唯一匹配，进入/保持 confirming\n    elif matched_index >= 0:\n        out_state = \"confirming\"\n        out_matched_index = matched_index\n        out_matched_account = _get_account(matched_index) or prev_matched_account\n        out_match_failed = False\n        is_completed = False\n\n    # 场景D：多条匹配，继续澄清\n    elif match_count >= 2:\n        out_state = \"matching\"\n        out_matched_index = -1\n        out_matched_account = \"\"\n        out_match_failed = False\n        is_completed = False\n        clean_history = (prev_state == \"confirming\")\n\n    # 场景E：未命中任何候选\n    else:\n        out_state = \"matching\"\n        out_matched_index = -1\n        out_matched_account = \"\"\n        out_match_failed = False\n        is_completed = False\n        clean_history = (prev_state == \"confirming\")\n\n    # === 5. 组装输出 ===\n    return {\n        \"state\": out_state,\n        \"matched_index\": out_matched_index,\n        \"matched_account\": out_matched_account,\n        \"match_failed\": out_match_failed,\n        \"is_completed\": is_completed,\n        \"cleanHistory\": clean_history\n    }\n"
+        },
+        {
+          "key": "isCatchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": false
+        },
+        {
+          "key": "catchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "{}"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_addOutputParam",
+          "key": "system_addOutputParam",
+          "type": "dynamic",
+          "valueType": "dynamic",
+          "label": "",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "完整响应数据",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "m9FQZhqVIo6b",
+          "type": "dynamic",
+          "key": "state",
+          "valueType": "string",
+          "label": "state",
+          "description": ""
+        },
+        {
+          "id": "aWAlIWpPxa6G",
+          "type": "dynamic",
+          "key": "matched_index",
+          "valueType": "number",
+          "label": "matched_index",
+          "description": ""
+        },
+        {
+          "id": "r850FuG6xqZi",
+          "type": "dynamic",
+          "key": "matched_account",
+          "valueType": "string",
+          "label": "matched_account",
+          "description": ""
+        },
+        {
+          "id": "cFwczYFNftr8",
+          "type": "dynamic",
+          "key": "match_failed",
+          "valueType": "boolean",
+          "label": "match_failed",
+          "description": ""
+        },
+        {
+          "id": "thLLNdmxN2FB",
+          "type": "dynamic",
+          "key": "is_completed",
+          "valueType": "boolean",
+          "label": "is_completed",
+          "description": ""
+        },
+        {
+          "id": "xbe7vWOwDsHt",
+          "type": "dynamic",
+          "key": "cleanHistory",
+          "valueType": "boolean",
+          "label": "cleanHistory",
+          "description": ""
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "oYc45c928m37",
+      "name": "判断器",
+      "intro": "基于条件判断执行不同的分支，适用于需要根据不同判断结果来决定后续操作的场景",
+      "avatar": "/imgs/workflow/ifElse.svg",
+      "flowNodeType": "ifElseNode",
+      "showStatus": true,
+      "position": {
+        "x": 4135.146502275412,
+        "y": -431.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "ifElseList",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "",
+          "value": [
+            {
+              "condition": "OR",
+              "list": [
+                {
+                  "variable": [
+                    "yuxc97TeaAbT",
+                    "xbe7vWOwDsHt"
+                  ],
+                  "condition": "equalTo",
+                  "value": "true"
+                },
+                {
+                  "variable": [
+                    "k4cdNiV699SY",
+                    "jSXH0zdYmjH1"
+                  ],
+                  "condition": "equalTo",
+                  "value": "completed"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "id": "ifElseResult",
+          "key": "ifElseResult",
+          "label": "判断结果",
+          "valueType": "string",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "fKobnBLG0eOO",
+      "name": "清空",
+      "intro": "选择操作类型进行新增、删除、查询等操作",
+      "avatar": "/imgs/workflow/messageIcon.svg",
+      "flowNodeType": "handleMessage",
+      "showStatus": true,
+      "position": {
+        "x": 5331.146502275412,
+        "y": -269.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "operateType",
+          "label": "操作类型",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "value": "clear",
+          "description": "操作类型",
+          "required": false
+        },
+        {
+          "key": "sessionId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "会话ID",
+          "value": "{{$VARIABLE_NODE_ID.callId$}} {{$ENV_VARIABLE_NODE_ID.ADDRESS$}}",
+          "placeholder": "请输入会话ID",
+          "required": false
+        },
+        {
+          "key": "messageId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息ID",
+          "value": "",
+          "placeholder": "请输入消息ID",
+          "required": false
+        },
+        {
+          "key": "limit",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "查询条数",
+          "placeholder": "消息列表数量",
+          "required": false,
+          "value": 6
+        },
+        {
+          "key": "messageRole",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "角色",
+          "value": "System",
+          "placeholder": "角色",
+          "required": false
+        },
+        {
+          "key": "toolName",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "工具名称",
+          "value": "",
+          "placeholder": "请输入工具名称",
+          "required": false
+        },
+        {
+          "key": "messageContent",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息内容",
+          "value": 3000,
+          "placeholder": "消息内容",
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "响应信息",
+          "description": "消息操作后到响应信息。",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "isSuccess",
+          "key": "isSuccess",
+          "label": "是否成功",
+          "description": "消息操作是否成功。",
+          "valueType": "boolean",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "oS7BLyGu2qnm",
+      "name": "新增用户问",
+      "intro": "选择操作类型进行新增、删除、查询等操作",
+      "avatar": "/imgs/workflow/messageIcon.svg",
+      "flowNodeType": "handleMessage",
+      "showStatus": true,
+      "position": {
+        "x": 4881.146502275412,
+        "y": -408.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "operateType",
+          "label": "操作类型",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "value": "add",
+          "description": "操作类型",
+          "required": false
+        },
+        {
+          "key": "sessionId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "会话ID",
+          "value": "{{$VARIABLE_NODE_ID.callId$}} {{$ENV_VARIABLE_NODE_ID.ADDRESS$}}",
+          "placeholder": "请输入会话ID",
+          "required": false
+        },
+        {
+          "key": "messageId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息ID",
+          "value": "",
+          "placeholder": "请输入消息ID",
+          "required": false
+        },
+        {
+          "key": "limit",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "查询条数",
+          "placeholder": "消息列表数量",
+          "required": false,
+          "value": 6
+        },
+        {
+          "key": "messageRole",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "角色",
+          "value": "Human",
+          "placeholder": "角色",
+          "required": false
+        },
+        {
+          "key": "toolName",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "工具名称",
+          "value": "",
+          "placeholder": "请输入工具名称",
+          "required": false
+        },
+        {
+          "key": "messageContent",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息内容",
+          "value": "{{$nAHoKATFB9U6.fjISS1cAwKGb$}}",
+          "placeholder": "消息内容",
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "响应信息",
+          "description": "消息操作后到响应信息。",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "msgIds",
+          "key": "msgIds",
+          "label": "消息ID",
+          "description": "消息ID。",
+          "valueType": "string",
+          "type": "static"
+        },
+        {
+          "id": "isSuccess",
+          "key": "isSuccess",
+          "label": "是否成功",
+          "description": "消息操作是否成功。",
+          "valueType": "boolean",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "zs5hfv3hEptN",
+      "name": "新增AI",
+      "intro": "选择操作类型进行新增、删除、查询等操作",
+      "avatar": "/imgs/workflow/messageIcon.svg",
+      "flowNodeType": "handleMessage",
+      "showStatus": true,
+      "position": {
+        "x": 5331.146502275412,
+        "y": -408.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "operateType",
+          "label": "操作类型",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "value": "add",
+          "description": "操作类型",
+          "required": false
+        },
+        {
+          "key": "sessionId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "会话ID",
+          "value": "{{$VARIABLE_NODE_ID.callId$}} {{$ENV_VARIABLE_NODE_ID.ADDRESS$}}",
+          "placeholder": "请输入会话ID",
+          "required": false
+        },
+        {
+          "key": "messageId",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息ID",
+          "value": "",
+          "placeholder": "请输入消息ID",
+          "required": false
+        },
+        {
+          "key": "limit",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "查询条数",
+          "placeholder": "消息列表数量",
+          "required": false,
+          "value": 6
+        },
+        {
+          "key": "messageRole",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "角色",
+          "value": "AI",
+          "placeholder": "角色",
+          "required": false
+        },
+        {
+          "key": "toolName",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "工具名称",
+          "value": "",
+          "placeholder": "请输入工具名称",
+          "required": false
+        },
+        {
+          "key": "messageContent",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "string",
+          "label": "消息内容",
+          "value": "{{$k4cdNiV699SY.qZ3X0ImuTFoF$}}",
+          "placeholder": "消息内容",
+          "required": false
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "响应信息",
+          "description": "消息操作后到响应信息。",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "msgIds",
+          "key": "msgIds",
+          "label": "消息ID",
+          "description": "消息ID。",
+          "valueType": "string",
+          "type": "static"
+        },
+        {
+          "id": "isSuccess",
+          "key": "isSuccess",
+          "label": "是否成功",
+          "description": "消息操作是否成功。",
+          "valueType": "boolean",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "vBR6EQfj1Nnt",
+      "name": "变量更新",
+      "intro": "可以引用并更新前置组件的输出变量或者自定义变量等，同时更新后的值仅对于后置组件生效",
+      "avatar": "/imgs/workflow/variable.png",
+      "flowNodeType": "variableUpdate",
+      "showStatus": true,
+      "position": {
+        "x": 3235.146502275412,
+        "y": -335.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "updateList",
+          "valueType": "any",
+          "label": "",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            {
+              "variable": [
+                "CHAT_VARIABLE_NODE_ID",
+                "state"
+              ],
+              "value": [
+                "yuxc97TeaAbT",
+                "m9FQZhqVIo6b"
+              ],
+              "valueType": "string",
+              "renderType": "reference"
+            },
+            {
+              "variable": [
+                "CHAT_VARIABLE_NODE_ID",
+                "matched_index"
+              ],
+              "value": [
+                "yuxc97TeaAbT",
+                "aWAlIWpPxa6G"
+              ],
+              "renderType": "reference",
+              "valueType": "number"
+            },
+            {
+              "variable": [
+                "CHAT_VARIABLE_NODE_ID",
+                "last_unmatched_address"
+              ],
+              "value": [
+                "w5fdGKlksBNk",
+                "nextLastUnmatchedAddress"
+              ],
+              "renderType": "reference",
+              "valueType": "string"
+            },
+            {
+              "variable": [
+                "CHAT_VARIABLE_NODE_ID",
+                "similar_no_match_count"
+              ],
+              "value": [
+                "w5fdGKlksBNk",
+                "nextSimilarNoMatchCount"
+              ],
+              "renderType": "reference",
+              "valueType": "number"
+            }
+          ]
+        }
+      ],
+      "outputs": [],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "k4cdNiV699SY",
+      "name": "buildOupt",
+      "intro": "执行一段脚本代码，通常用于进行复杂的数据处理",
+      "avatar": "/imgs/workflow/code.svg",
+      "flowNodeType": "code",
+      "showStatus": true,
+      "position": {
+        "x": 3685.146502275412,
+        "y": -335.1965473647891
+      },
+      "version": "v2",
+      "inputs": [
+        {
+          "key": "system_addInputParam",
+          "renderTypeList": [
+            "addInputParam"
+          ],
+          "valueType": "dynamic",
+          "label": "",
+          "required": false,
+          "description": "这些变量会作为代码的运行的输入参数",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "key": "llm_result",
+          "valueType": "object",
+          "label": "llm_result",
+          "renderTypeList": [
+            "reference"
+          ],
+          "required": false,
+          "description": "",
+          "canEdit": true,
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "value": [
+            "w5fdGKlksBNk",
+            "yStQQpHitgaJ"
+          ]
+        },
+        {
+          "renderTypeList": [
+            "reference"
+          ],
+          "valueType": "object",
+          "canEdit": true,
+          "key": "data",
+          "label": "data",
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "required": false,
+          "description": "",
+          "value": [
+            "yuxc97TeaAbT",
+            "system_rawResponse"
+          ]
+        },
+        {
+          "key": "codeType",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": "py"
+        },
+        {
+          "key": "isNewVersion",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": true
+        },
+        {
+          "key": "code",
+          "renderTypeList": [
+            "custom"
+          ],
+          "required": false,
+          "label": "",
+          "value": "def main(data: dict, llm_result: dict) -> dict:\n    match_failed = bool(data.get(\"match_failed\", False))\n    is_completed = bool(data.get(\"is_completed\", False))\n    state = str(data.get(\"state\") or \"matching\").strip()\n\n    try:\n        matched_index = int(data.get(\"matched_index\") if data.get(\"matched_index\") is not None else -1)\n    except (ValueError, TypeError):\n        matched_index = -1\n\n    matched_account = str(data.get(\"matched_account\") or \"\").strip()\n\n    if not isinstance(llm_result, dict):\n        llm_result = {}\n\n    llm_reply = str(llm_result.get(\"reply\") or \"\").strip()\n\n    try:\n        match_count = int(llm_result.get(\"match_count\") if llm_result.get(\"match_count\") is not None else -1)\n    except (ValueError, TypeError):\n        match_count = -1\n\n    MATCH_FAILED_REPLY_SAME = \"抱歉你提供的地址匹配不上，请重新提供一下所在小区或者村庄\"\n    CONFIRM_REPLY_TEMPLATE = \"请问您说的是{address}吗？\"\n    CUSTOM_PREFIX = \"我记录的地址信息是：\"\n\n    reply = \"\"\n\n    # 1. 完成态\n    if is_completed:\n        reply = \"好的，请稍候\"\n\n    # 2. 自定义追问优先级最高，避免被后续逻辑覆盖\n    elif llm_reply.startswith(CUSTOM_PREFIX):\n        reply = llm_reply\n\n    # 3. 提取失败\n    elif match_failed:\n        reply = llm_reply if llm_reply else MATCH_FAILED_REPLY_SAME\n\n    # 4. confirm 阶段反问\n    elif state == \"confirming\" and matched_index >= 0:\n        reply = CONFIRM_REPLY_TEMPLATE.format(address=matched_account) if matched_account else MATCH_FAILED_REPLY_SAME\n\n    # 5. 未命中候选\n    elif match_count == 0:\n        reply = llm_reply if llm_reply else MATCH_FAILED_REPLY_SAME\n\n    # 6. 其他情况，直接透传\n    else:\n        reply = llm_reply\n\n    # 7. 防空播报\n    if not (match_failed or is_completed) and not reply:\n        reply = MATCH_FAILED_REPLY_SAME\n\n    return {\n        \"matched_account\": matched_account,\n        \"matched_index\": matched_index,\n        \"is_completed\": is_completed,\n        \"match_failed\": match_failed,\n        \"reply\": reply,\n        \"state\": state\n    }\n"
+        },
+        {
+          "key": "isCatchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": false
+        },
+        {
+          "key": "catchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "{}"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_addOutputParam",
+          "key": "system_addOutputParam",
+          "type": "dynamic",
+          "valueType": "dynamic",
+          "label": "",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "完整响应数据",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "cbw9Vbcfumu7",
+          "type": "dynamic",
+          "key": "matched_account",
+          "valueType": "string",
+          "label": "matched_account",
+          "description": ""
+        },
+        {
+          "id": "bRdl6e9J2Kmj",
+          "type": "dynamic",
+          "key": "matched_index",
+          "valueType": "number",
+          "label": "matched_index",
+          "description": ""
+        },
+        {
+          "id": "oZxCCz87r15q",
+          "type": "dynamic",
+          "key": "is_completed",
+          "valueType": "boolean",
+          "label": "is_completed",
+          "description": ""
+        },
+        {
+          "id": "gHqAqphhwcyS",
+          "type": "dynamic",
+          "key": "match_failed",
+          "valueType": "boolean",
+          "label": "match_failed",
+          "description": ""
+        },
+        {
+          "id": "qZ3X0ImuTFoF",
+          "type": "dynamic",
+          "key": "reply",
+          "valueType": "string",
+          "label": "reply",
+          "description": "reply"
+        },
+        {
+          "id": "jSXH0zdYmjH1",
+          "type": "dynamic",
+          "key": "state",
+          "valueType": "string",
+          "label": "state",
+          "description": ""
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "zVhj7g3oFhfh",
+      "name": "输出",
+      "intro": "该组件可以直接输出一段指定的内容。常用于引导、提示",
+      "avatar": "/imgs/workflow/reply.png",
+      "flowNodeType": "answerNode",
+      "position": {
+        "x": 6231.146502275412,
+        "y": -335.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "text",
+          "renderTypeList": [
+            "textarea",
+            "reference"
+          ],
+          "valueType": "any",
+          "label": "core.module.input.label.Response content",
+          "description": "core.module.input.description.Response content",
+          "placeholder": "输出内容",
+          "selectedTypeIndex": 1,
+          "value": [
+            "wzfZSLEYeLeJ",
+            "system_rawResponse"
+          ]
+        }
+      ],
+      "outputs": [],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "wzfZSLEYeLeJ",
+      "name": "final_output",
+      "intro": "执行一段脚本代码，通常用于进行复杂的数据处理",
+      "avatar": "/imgs/workflow/code.svg",
+      "flowNodeType": "code",
+      "showStatus": true,
+      "position": {
+        "x": 5781.146502275412,
+        "y": -335.1965473647891
+      },
+      "version": "v2",
+      "inputs": [
+        {
+          "key": "system_addInputParam",
+          "renderTypeList": [
+            "addInputParam"
+          ],
+          "valueType": "dynamic",
+          "label": "",
+          "required": false,
+          "description": "这些变量会作为代码的运行的输入参数",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "renderTypeList": [
+            "reference"
+          ],
+          "valueType": "object",
+          "canEdit": true,
+          "key": "data",
+          "label": "data",
+          "editField": {
+            "key": true,
+            "valueType": true
+          },
+          "required": false,
+          "description": "",
+          "value": [
+            "k4cdNiV699SY",
+            "system_rawResponse"
+          ]
+        },
+        {
+          "key": "codeType",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": "js"
+        },
+        {
+          "key": "isNewVersion",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": true
+        },
+        {
+          "key": "code",
+          "renderTypeList": [
+            "custom"
+          ],
+          "required": false,
+          "label": "",
+          "value": "function main({ data }) {\n  return {\n    content: data.reply || \"\",\n    IsEnd: data.is_completed ? \"1\" : \"0\",\n    result: data.matched_account || \"\"\n  };\n}\n"
+        },
+        {
+          "key": "isCatchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "required": false,
+          "label": "",
+          "value": false
+        },
+        {
+          "key": "catchError",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "{}"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "system_addOutputParam",
+          "key": "system_addOutputParam",
+          "type": "dynamic",
+          "valueType": "dynamic",
+          "label": "",
+          "editField": {
+            "key": true,
+            "valueType": true
+          }
+        },
+        {
+          "id": "system_rawResponse",
+          "key": "system_rawResponse",
+          "label": "完整响应数据",
+          "valueType": "any",
+          "type": "static"
+        }
+      ],
+      "templateType": "tools"
+    },
+    {
+      "nodeId": "yRzbOXFDXOJd",
+      "name": "大模型",
+      "intro": "AI 大模型对话",
+      "avatar": "/imgs/workflow/AI.png",
+      "flowNodeType": "chatNode",
+      "showStatus": true,
+      "position": {
+        "x": 1885.146502275412,
+        "y": -408.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "model",
+          "renderTypeList": [
+            "settingLLMModel"
+          ],
+          "label": "core.module.input.label.aiModel",
+          "valueType": "string",
+          "value": "a46ddec5aacc8331ec93feee3f17bcd3"
+        },
+        {
+          "key": "modelConfig",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "value": {
+            "isDeepThinkingMode": true,
+            "isToolInvocation": true,
+            "isStructuredOutput": true
+          },
+          "label": "模型配置"
+        },
+        {
+          "key": "temperature",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "number",
+          "min": 0,
+          "max": 10,
+          "step": 1
+        },
+        {
+          "key": "topP",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "number",
+          "min": 0,
+          "max": 1,
+          "step": 0.1
+        },
+        {
+          "key": "stopSigns",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "",
+          "valueType": "string"
+        },
+        {
+          "key": "maxToken",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "number",
+          "min": 100,
+          "max": 4000,
+          "step": 50,
+          "value": 2048
+        },
+        {
+          "key": "isResponseAnswerText",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": false,
+          "valueType": "boolean"
+        },
+        {
+          "key": "quoteTemplate",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "string"
+        },
+        {
+          "key": "quotePrompt",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "string"
+        },
+        {
+          "key": "aiTools",
+          "renderTypeList": [
+            "settingAiTools"
+          ],
+          "label": "",
+          "debugLabel": "工具调用",
+          "description": "",
+          "valueType": "any"
+        },
+        {
+          "key": "systemPrompt",
+          "renderTypeList": [
+            "textarea"
+          ],
+          "max": 3000,
+          "valueType": "string",
+          "label": "系统提示词",
+          "description": "",
+          "placeholder": "请输入，可以使用/变量名 的方式引用变量",
+          "value": "# Role\n你是电信运营商地址确认助手，只输出JSON。\n\n# Output\n{\"matched_index\":-1,\"match_count\":0,\"is_completed\":false,\"is_extract_failed\":false,\"reply\":\"\"}\n\n# Rules\n1. state=confirming：\n- 用户确认“对/是/没错” -> 保持当前matched_index，match_count=1，is_completed=true，reply=\"\"\n- 用户否认“不是/不对/错了” -> matched_index=-1，match_count=0，is_completed=false，is_extract_failed=false，reply=\"好的，请您再重新说一下报修宽带所在小区或村镇名称。\"\n- 无关话语 -> 保持当前matched_index，match_count=1，is_completed=false，reply=\"\"\n\n2. matching阶段先判断强冲突。若用户与候选在省/市/区县/乡镇/街道/路名/楼栋/门牌上有两处及以上明显冲突，禁止匹配。pinyin只能修正同一地址主体内的同音字/错别字，不能跨地域乱匹配。\n\n3. 如果本轮更像是在补充上一轮地址片段（例如只说小区、楼栋、门牌），必须结合 last_unmatched_address 合并理解，不能只按当前片段单独匹配。\n\n4. 唯一匹配：只有在无强冲突时，且用户本轮信息或补充片段能把 candidates_info 缩到1条，才输出 matched_index=对应索引，match_count=1，is_completed=false，is_extract_failed=false，reply=\"\"。不能因为 candidates_info 只有1条就直接匹配。\n\n5. 多条匹配：同小区不同楼时追问“楼栋号、单元号及门牌号”；如果用户已经说到小区/村镇和楼栋，但仍有多条候选，必须继续追问“单元号及门牌号”；如果已经说到单元，则继续追问“门牌号”。绝不能再回退追问“小区或村镇名称”。同村/乡镇下多条时追问“街道名称及门牌号”；仅房间不同必须追问到房间号。\n\n6. 若当前仍无匹配，且当前地址与上一轮未匹配地址字面或拼音高度相似，且 similar_no_match_count>=1，则直接输出 is_extract_failed=true，reply=\"\"。\n\n7. 层级缺失：只到市/区县，或只有泛化区域，没有小区/村镇/街道/路名时，reply=\"好的，请您再说一下具体的小区或村镇名称。\"。如果用户已经说出小区/村镇或楼栋，则不属于本条，不能回退追问小区或村镇名称。\n\n8. 完全没有地址信息时，reply=\"请您提供详细的地址信息\"\n\n9. 已提取到有效地址信息但无匹配时，reply=\"请您提供正确完整的地址信息\"\n\n10. 当 state=matching 且 matched_index=-1 时：\n- 如果已经能确定到同一小区/村镇，或者已经拿到楼栋但仍未唯一匹配，允许 reply 以“我记录的地址信息是：”开头，继续精确追问楼栋号、单元号或门牌号。\n- 除上述精确追问外，reply 只能是以下3句之一：\n- 好的，请您再说一下具体的小区或村镇名称。\n- 请您提供详细的地址信息\n- 请您提供正确完整的地址信息\n绝不能输出：好的，请您再重新说一下报修宽带所在小区或村镇名称。\n\n11. 唯一匹配 / 提取失败 / 完成确认时，reply 必须为空字符串。"
+        },
+        {
+          "key": "userChatInput",
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "valueType": "string",
+          "label": "用户提示词",
+          "required": true,
+          "toolDescription": "用户提示词",
+          "description": "用户提示词",
+          "placeholder": "请输入，可以使用/变量名 的方式引用变量",
+          "value": "{{$nAHoKATFB9U6.z9jDFnN2Ec89$}}",
+          "selectedTypeIndex": 1
+        },
+        {
+          "key": "settingHistory",
+          "renderTypeList": [
+            "settingAiHistory"
+          ],
+          "valueType": "boolean",
+          "label": "",
+          "description": "",
+          "required": false,
+          "value": true
+        },
+        {
+          "key": "history",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "",
+          "required": false,
+          "value": ""
+        },
+        {
+          "key": "historyList",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "chatHistory",
+          "label": "",
+          "required": false,
+          "value": [
+            "k4JqqLZPDVUu",
+            "messageList"
+          ]
+        },
+        {
+          "key": "thinking",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "boolean",
+          "label": "",
+          "required": false,
+          "value": false
+        },
+        {
+          "key": "quoteQA",
+          "renderTypeList": [
+            "settingDatasetQuotePrompt"
+          ],
+          "label": "",
+          "debugLabel": "知识库引用",
+          "description": "",
+          "valueType": "datasetQuote"
+        },
+        {
+          "key": "maxToolIterations",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "最大迭代数",
+          "description": "限制工具执行的迭代次数",
+          "required": true,
+          "min": 0,
+          "max": 50,
+          "value": 3
+        },
+        {
+          "key": "onlyOnce",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "boolean",
+          "label": "",
+          "description": "是否只调用一次大模型",
+          "required": false,
+          "value": false
+        },
+        {
+          "key": "settingStructuredOutput",
+          "renderTypeList": [
+            "settingStructuredOutput"
+          ],
+          "label": "",
+          "debugLabel": "结构化输出",
+          "description": "开启后，将返回结构化数据，方便后续流程处理",
+          "valueType": "boolean",
+          "value": true
+        },
+        {
+          "key": "structuredOutput",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "结构化输出",
+          "description": "结构化输出",
+          "required": true,
+          "value": "{\n\t\"type\": \"object\",\n\t\"properties\": {\n\t\t\"matched_index\": {\n\t\t\t\"type\": \"integer\",\n\t\t\t\"description\": \"当前匹配到的索引位置\"\n\t\t},\n\t\t\"match_count\": {\n\t\t\t\"type\": \"integer\",\n\t\t\t\"description\": \"匹配到的总数量。\"\n\t\t},\n\t\t\"is_completed\": {\n\t\t\t\"type\": \"boolean\",\n\t\t\t\"description\": \"是否已经完成。\"\n\t\t},\n\t\t\"reply\": {\n\t\t\t\"type\": \"string\",\n\t\t\t\"description\": \"回复文本内容。\"\n\t\t},\n\t\t\"is_extract_failed\":{\n\t\t\t\"type\":\"boolean\",\n\t\t\t\"description\":\"连续相似错误地址且始终无匹配时为 true，否则为 false\"\n\t\t}\n\t},\n\t\"required\": [\n\t\t\"matched_index\",\n\t\t\"match_count\",\n\t\t\"is_completed\",\n\t\t\"reply\",\n\t\t\"is_extract_failed\"\n\t],\n\t\"additionalProperties\": false\n}"
+        },
+        {
+          "key": "settingExceptionHandling",
+          "renderTypeList": [
+            "settingExceptionHandling"
+          ],
+          "label": "",
+          "debugLabel": "异常处理",
+          "description": "开启后，将返回结构化数据，方便后续流程处理",
+          "valueType": "boolean",
+          "value": false
+        },
+        {
+          "key": "exceptionHandling",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "异常处理",
+          "description": "异常处理",
+          "required": true,
+          "value": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "history",
+          "key": "history",
+          "label": "core.module.output.label.New context",
+          "description": "core.module.output.description.New context",
+          "valueType": "chatHistory",
+          "type": "static"
+        },
+        {
+          "id": "outputText",
+          "key": "outputText",
+          "label": "core.module.output.label.Ai response content",
+          "description": "core.module.output.description.Ai response content",
+          "valueType": "string",
+          "type": "static"
+        },
+        {
+          "id": "structuredOutput",
+          "key": "structuredOutput",
+          "label": "结构化输出",
+          "description": "结构化输出",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "matched_index",
+          "key": "matched_index",
+          "label": "matched_index",
+          "description": "当前匹配到的索引位置",
+          "valueType": "integer",
+          "type": "static"
+        },
+        {
+          "id": "match_count",
+          "key": "match_count",
+          "label": "match_count",
+          "description": "匹配到的总数量。",
+          "valueType": "integer",
+          "type": "static"
+        },
+        {
+          "id": "is_completed",
+          "key": "is_completed",
+          "label": "is_completed",
+          "description": "是否已经完成。",
+          "valueType": "boolean",
+          "type": "static"
+        },
+        {
+          "id": "reply",
+          "key": "reply",
+          "label": "reply",
+          "description": "回复文本内容。",
+          "valueType": "string",
+          "type": "static"
+        },
+        {
+          "id": "is_extract_failed",
+          "key": "is_extract_failed",
+          "label": "is_extract_failed",
+          "description": "连续相似错误地址且始终无匹配时为 true，否则为 false",
+          "valueType": "boolean",
+          "type": "static"
+        }
+      ],
+      "templateType": "textAnswer"
+    },
+    {
+      "nodeId": "hQWemluC40nu",
+      "name": "意图判断",
+      "intro": "AI 大模型对话",
+      "avatar": "/imgs/workflow/AI.png",
+      "flowNodeType": "chatNode",
+      "showStatus": true,
+      "position": {
+        "x": 1885.146502275412,
+        "y": -262.1965473647891
+      },
+      "version": "481",
+      "inputs": [
+        {
+          "key": "model",
+          "renderTypeList": [
+            "settingLLMModel"
+          ],
+          "label": "core.module.input.label.aiModel",
+          "valueType": "string",
+          "value": "a46ddec5aacc8331ec93feee3f17bcd3"
+        },
+        {
+          "key": "modelConfig",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "value": {
+            "isDeepThinkingMode": true,
+            "isToolInvocation": true,
+            "isStructuredOutput": true
+          },
+          "label": "模型配置"
+        },
+        {
+          "key": "temperature",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "number",
+          "min": 0,
+          "max": 10,
+          "step": 1
+        },
+        {
+          "key": "topP",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "number",
+          "min": 0,
+          "max": 1,
+          "step": 0.1
+        },
+        {
+          "key": "stopSigns",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": "",
+          "valueType": "string"
+        },
+        {
+          "key": "maxToken",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "number",
+          "min": 100,
+          "max": 4000,
+          "step": 50
+        },
+        {
+          "key": "isResponseAnswerText",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "value": false,
+          "valueType": "boolean"
+        },
+        {
+          "key": "quoteTemplate",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "string"
+        },
+        {
+          "key": "quotePrompt",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "label": "",
+          "valueType": "string"
+        },
+        {
+          "key": "aiTools",
+          "renderTypeList": [
+            "settingAiTools"
+          ],
+          "label": "",
+          "debugLabel": "工具调用",
+          "description": "",
+          "valueType": "any"
+        },
+        {
+          "key": "systemPrompt",
+          "renderTypeList": [
+            "textarea"
+          ],
+          "max": 3000,
+          "valueType": "string",
+          "label": "系统提示词",
+          "description": "",
+          "placeholder": "请输入，可以使用/变量名 的方式引用变量",
+          "value": "# Role\n你是并行运行的辅助判断节点，只负责判断用户这句话是否属于无意义话术。\n\n# 任务\n结合输入中的 Context 和用户原话，判断这句话是否缺乏有效业务信息，无法用于地址匹配或确认。\n\n# 关键原则\n1. 只要用户说出了任何地址层级信息，就不是无意义话术。\n2. 即使地址层级不完整，例如只到市级、区县级，也仍然属于地址信息，不是无意义话术。\n3. 这类“层级不完整”的情况，应交给主地址匹配节点处理为“层级缺失”，而不是在本节点判成无意义。\n4. 任何确认、否认、地址补充、地址纠正，都不是无意义话术。\n5. 纯数字房号、门牌号、楼栋号，只要可能是对上一轮地址的补充，也不是无意义话术，例如“1109”“9栋”“2单元”。\n\n## 判定为无意义话术\n- 纯语气词、口头禅、停顿词：如“啊”“嗯”“那个”“喂喂喂”\n- 明显跑题、闲聊、抱怨、重复噪声、ASR乱码\n- 既没有提供地址线索，也没有表达确认或否认\n- 在 confirming 阶段既没有明确回答“是/对/没错”，也没有明确否认，只是在含糊拖延\n\n## 不判定为无意义话术\n- 任何包含地址线索的表达：省、市、区、县、镇、乡、街道、路、小区、村、楼栋、单元、门牌号\n- 纯数字房号、门牌号、楼栋号，只要可能是对上一轮地址的补充，也不是无意义话术，例如“1109”“9栋”“2单元”\n- 对上一轮候选的确认或否认：如“对”“是的”“不是”“不对”\n- 对地址的补充或纠正：如“八号楼”“不是建明，是翟营”\n- 层级虽粗但仍是地址信息：如“北京市大同区”“福建省福州市鼓楼区”“建明小区”“翟营大街”\n\n# Output\n只输出 JSON：\n{\"is_meaningless\": false, \"reply\": \"\"}\n\n# 输出要求\n- is_meaningless=true 时，必须给出简短可播报的引导语\n- matching 阶段 reply 用：麻烦您直接说一下报修宽带所在的小区、村镇或详细地址。\n- confirming 阶段 reply 用：请直接回答是或者不是。\n- is_meaningless=false 时，reply 必须为空字符串\n\n# Examples\nInput:\n[Context] state=matching, matched_index=\nUser: 嗯啊那个\nOutput:\n{\"is_meaningless\": true, \"reply\": \"麻烦您直接说一下报修宽带所在的小区、村镇或详细地址。\"}\n\nInput:\n[Context] state=matching, matched_index=\nUser: 北京市大同区\nOutput:\n{\"is_meaningless\": false, \"reply\": \"\"}\n\nInput:\n[Context] state=matching, matched_index=\nUser: 建明小区\nOutput:\n{\"is_meaningless\": false, \"reply\": \"\"}\n\nInput:\n[Context] state=matching, matched_index=\nUser: 1109\nOutput:\n{\"is_meaningless\": false, \"reply\": \"\"}\n\nInput:\n[Context] state=matching, matched_index=\nUser: 9栋\nOutput:\n{\"is_meaningless\": false, \"reply\": \"\"}\n\nInput:\n[Context] state=confirming, matched_index=0\nUser: 啊你等等\nOutput:\n{\"is_meaningless\": true, \"reply\": \"请直接回答是或者不是。\"}\n\nInput:\n[Context] state=confirming, matched_index=0\nUser: 对的\nOutput:\n{\"is_meaningless\": false, \"reply\": \"\"}\n"
+        },
+        {
+          "key": "userChatInput",
+          "renderTypeList": [
+            "reference",
+            "textarea"
+          ],
+          "valueType": "string",
+          "label": "用户提示词",
+          "required": true,
+          "toolDescription": "用户提示词",
+          "description": "用户提示词",
+          "placeholder": "请输入，可以使用/变量名 的方式引用变量",
+          "value": "[Context] state={{$CHAT_VARIABLE_NODE_ID.state$}}, matched_index={{$CHAT_VARIABLE_NODE_ID.matched_index$}}\nUser: {{$448745.userChatInput$}}",
+          "selectedTypeIndex": 1
+        },
+        {
+          "key": "settingHistory",
+          "renderTypeList": [
+            "settingAiHistory"
+          ],
+          "valueType": "boolean",
+          "label": "",
+          "description": "",
+          "required": false,
+          "value": false
+        },
+        {
+          "key": "history",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "",
+          "required": false,
+          "value": ""
+        },
+        {
+          "key": "historyList",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "chatHistory",
+          "label": "",
+          "required": false,
+          "value": []
+        },
+        {
+          "key": "thinking",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "boolean",
+          "label": "",
+          "required": false,
+          "value": false
+        },
+        {
+          "key": "quoteQA",
+          "renderTypeList": [
+            "settingDatasetQuotePrompt"
+          ],
+          "label": "",
+          "debugLabel": "知识库引用",
+          "description": "",
+          "valueType": "datasetQuote"
+        },
+        {
+          "key": "maxToolIterations",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "number",
+          "label": "最大迭代数",
+          "description": "限制工具执行的迭代次数",
+          "required": false,
+          "min": 0,
+          "max": 50,
+          "value": 3
+        },
+        {
+          "key": "onlyOnce",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "boolean",
+          "label": "",
+          "description": "是否只调用一次大模型",
+          "required": false,
+          "value": false
+        },
+        {
+          "key": "settingStructuredOutput",
+          "renderTypeList": [
+            "settingStructuredOutput"
+          ],
+          "label": "",
+          "debugLabel": "结构化输出",
+          "description": "开启后，将返回结构化数据，方便后续流程处理",
+          "valueType": "boolean",
+          "value": true
+        },
+        {
+          "key": "structuredOutput",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "结构化输出",
+          "description": "结构化输出",
+          "required": false,
+          "value": "{\n\"type\": \"object\",\n\"properties\": {\n\"is_meaningless\": {\n\"type\": \"boolean\",\n\"description\": \"是否为无意义话术\"\n},\n\"reply\": {\n\"type\": \"string\",\n\"description\": \"当 is_meaningless=true 时返回引导语；否则必须为空字符串\",\n\"default\": \"\"\n}\n},\n\"required\": [\n\"is_meaningless\",\n\"reply\"\n],\n\"additionalProperties\": false\n}"
+        },
+        {
+          "key": "settingExceptionHandling",
+          "renderTypeList": [
+            "settingExceptionHandling"
+          ],
+          "label": "",
+          "debugLabel": "异常处理",
+          "description": "开启后，将返回结构化数据，方便后续流程处理",
+          "valueType": "boolean",
+          "value": false
+        },
+        {
+          "key": "exceptionHandling",
+          "renderTypeList": [
+            "hidden"
+          ],
+          "valueType": "any",
+          "label": "异常处理",
+          "description": "异常处理",
+          "required": false,
+          "value": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "history",
+          "key": "history",
+          "label": "core.module.output.label.New context",
+          "description": "core.module.output.description.New context",
+          "valueType": "chatHistory",
+          "type": "static"
+        },
+        {
+          "id": "outputText",
+          "key": "outputText",
+          "label": "core.module.output.label.Ai response content",
+          "description": "core.module.output.description.Ai response content",
+          "valueType": "string",
+          "type": "static"
+        },
+        {
+          "id": "structuredOutput",
+          "key": "structuredOutput",
+          "label": "结构化输出",
+          "description": "结构化输出",
+          "valueType": "any",
+          "type": "static"
+        },
+        {
+          "id": "is_meaningless",
+          "key": "is_meaningless",
+          "label": "is_meaningless",
+          "description": "是否为无意义话术",
+          "valueType": "boolean",
+          "type": "static"
+        },
+        {
+          "id": "reply",
+          "key": "reply",
+          "label": "reply",
+          "description": "当 is_meaningless=true 时返回引导语；否则必须为空字符串",
+          "valueType": "string",
+          "type": "static"
+        }
+      ],
+      "templateType": "textAnswer"
+    }
+  ],
+  "edges": [
+    {
+      "source": "448745",
+      "target": "b5Y9lVVpGIif",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "448745-source-right",
+      "targetHandle": "b5Y9lVVpGIif-target-left"
+    },
+    {
+      "source": "b5Y9lVVpGIif",
+      "target": "kjz5uLBPQJLR",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "b5Y9lVVpGIif-source-right",
+      "targetHandle": "kjz5uLBPQJLR-target-left"
+    },
+    {
+      "source": "kjz5uLBPQJLR",
+      "target": "nAHoKATFB9U6",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "kjz5uLBPQJLR-source-right",
+      "targetHandle": "nAHoKATFB9U6-target-left"
+    },
+    {
+      "source": "nAHoKATFB9U6",
+      "target": "k4JqqLZPDVUu",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "nAHoKATFB9U6-source-right",
+      "targetHandle": "k4JqqLZPDVUu-target-left"
+    },
+    {
+      "source": "w5fdGKlksBNk",
+      "target": "yuxc97TeaAbT",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "w5fdGKlksBNk-source-right",
+      "targetHandle": "yuxc97TeaAbT-target-left"
+    },
+    {
+      "source": "oYc45c928m37",
+      "target": "fKobnBLG0eOO",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "oYc45c928m37-source-IF",
+      "targetHandle": "fKobnBLG0eOO-target-left"
+    },
+    {
+      "source": "oYc45c928m37",
+      "target": "oS7BLyGu2qnm",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "oYc45c928m37-source-ELSE",
+      "targetHandle": "oS7BLyGu2qnm-target-left"
+    },
+    {
+      "source": "oS7BLyGu2qnm",
+      "target": "zs5hfv3hEptN",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "oS7BLyGu2qnm-source-right",
+      "targetHandle": "zs5hfv3hEptN-target-left"
+    },
+    {
+      "source": "yuxc97TeaAbT",
+      "target": "vBR6EQfj1Nnt",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "yuxc97TeaAbT-source-right",
+      "targetHandle": "vBR6EQfj1Nnt-target-left"
+    },
+    {
+      "source": "vBR6EQfj1Nnt",
+      "target": "k4cdNiV699SY",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "vBR6EQfj1Nnt-source-right",
+      "targetHandle": "k4cdNiV699SY-target-left"
+    },
+    {
+      "source": "k4cdNiV699SY",
+      "target": "oYc45c928m37",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "k4cdNiV699SY-source-right",
+      "targetHandle": "oYc45c928m37-target-left"
+    },
+    {
+      "source": "zs5hfv3hEptN",
+      "target": "wzfZSLEYeLeJ",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "zs5hfv3hEptN-source-right",
+      "targetHandle": "wzfZSLEYeLeJ-target-left"
+    },
+    {
+      "source": "wzfZSLEYeLeJ",
+      "target": "zVhj7g3oFhfh",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "wzfZSLEYeLeJ-source-right",
+      "targetHandle": "zVhj7g3oFhfh-target-left"
+    },
+    {
+      "source": "fKobnBLG0eOO",
+      "target": "wzfZSLEYeLeJ",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "fKobnBLG0eOO-source-right",
+      "targetHandle": "wzfZSLEYeLeJ-target-left"
+    },
+    {
+      "source": "k4JqqLZPDVUu",
+      "target": "yRzbOXFDXOJd",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "k4JqqLZPDVUu-source-right",
+      "targetHandle": "yRzbOXFDXOJd-target-left"
+    },
+    {
+      "source": "yRzbOXFDXOJd",
+      "target": "w5fdGKlksBNk",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "yRzbOXFDXOJd-source-right",
+      "targetHandle": "w5fdGKlksBNk-target-left"
+    },
+    {
+      "source": "k4JqqLZPDVUu",
+      "target": "hQWemluC40nu",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "k4JqqLZPDVUu-source-right",
+      "targetHandle": "hQWemluC40nu-target-left"
+    },
+    {
+      "source": "hQWemluC40nu",
+      "target": "w5fdGKlksBNk",
+      "data": {
+        "shape": "smoothstep"
+      },
+      "sourceHandle": "hQWemluC40nu-source-right",
+      "targetHandle": "w5fdGKlksBNk-target-left"
+    }
+  ]
+}
