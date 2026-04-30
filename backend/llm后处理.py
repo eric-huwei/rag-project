@@ -18,6 +18,8 @@ def main(
     if not isinstance(address_list, list):
         address_list = []
 
+    NON_MERGE_HISTORY_PREFIX = "__NO_MERGE__:"
+
     def _to_int(value, default):
         try:
             return int(value) if value is not None else default
@@ -41,6 +43,19 @@ def main(
         if value is None:
             return default
         return str(value).strip()
+
+    def _is_non_merge_history(text: str) -> bool:
+        return _to_str(text).startswith(NON_MERGE_HISTORY_PREFIX)
+
+    def _strip_non_merge_history(text: str) -> str:
+        text = _to_str(text)
+        if _is_non_merge_history(text):
+            return text[len(NON_MERGE_HISTORY_PREFIX):].strip()
+        return text
+
+    def _mark_non_merge_history(text: str) -> str:
+        text = _strip_non_merge_history(text)
+        return f"{NON_MERGE_HISTORY_PREFIX}{text}" if text else ""
 
     def _normalize_text(text: str) -> str:
         text = _to_str(text)
@@ -266,6 +281,28 @@ def main(
 
     def _has_building_or_room(text: str) -> bool:
         return bool(_extract_building_name(text) or _extract_room_name(text) or _extract_unit_name(text))
+
+    def _has_precise_detail_conflict(user_text: str, candidate_text: str) -> bool:
+        user_text = _to_str(user_text)
+        candidate_text = _to_str(candidate_text)
+        if not user_text or not candidate_text:
+            return False
+
+        detail_extractors = (
+            _extract_building_name,
+            _extract_unit_name,
+            _extract_room_name,
+            _extract_house_name,
+        )
+        for extractor in detail_extractors:
+            user_value = extractor(user_text)
+            if not user_value:
+                continue
+            candidate_value = extractor(candidate_text)
+            if candidate_value and candidate_value != user_value:
+                return True
+
+        return False
 
     def _has_strong_conflict(user_text: str, candidate_text: str) -> bool:
         user_text = _to_str(user_text)
@@ -501,11 +538,16 @@ def main(
         user_unit = _extract_unit_name(current_input)
         user_room = _extract_room_name(current_input)
         user_house = _extract_house_name(current_input)
-        named_place_fragment = ""
+        named_place_fragments = []
         if not (user_community or user_road):
-            named_place_fragment = _extract_named_place_fragment(current_input)
+            raw_named_place_fragment = _extract_named_place_fragment(current_input)
+            stripped_named_place_fragment = _strip_leading_admin_tokens(raw_named_place_fragment)
+            for value in (raw_named_place_fragment, stripped_named_place_fragment):
+                value = _to_str(value)
+                if value and value not in named_place_fragments:
+                    named_place_fragments.append(value)
 
-        if not (user_community or user_road or named_place_fragment):
+        if not (user_community or user_road or named_place_fragments):
             return -1
         if not any([user_building, user_unit, user_room, user_house]):
             return -1
@@ -536,9 +578,13 @@ def main(
                 ):
                     continue
 
-            if named_place_fragment:
-                named_place_norm = _normalize_text(named_place_fragment)
-                if not (named_place_norm and named_place_norm in candidate_norm):
+            if named_place_fragments:
+                named_place_norms = [
+                    _normalize_text(fragment)
+                    for fragment in named_place_fragments
+                    if _normalize_text(fragment)
+                ]
+                if not any(named_place_norm in candidate_norm for named_place_norm in named_place_norms):
                     continue
 
             if user_building and _extract_building_name(candidate) != user_building:
@@ -622,6 +668,58 @@ def main(
         fragment = re.sub(r"(\d+号院|\d+号(?!楼|栋|幢|单元|室)|\d+弄|\d+里)", "", fragment)
         return fragment.strip()
 
+    def _strip_leading_admin_tokens(text: str) -> str:
+        text = _to_str(text)
+        if not text:
+            return ""
+
+        patterns = (
+            (r"^([\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:自治区|特别行政区|省))", None),
+            (r"^([\u4e00-\u9fa5A-Za-z0-9]{2,12}?市)", None),
+            (r"^([\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:区|县|旗))", _is_false_district_token),
+            (r"^([\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:街道|镇|乡))", None),
+        )
+
+        stripped = text
+        changed = True
+        while changed and stripped:
+            changed = False
+            for pattern, skip_fn in patterns:
+                match = re.match(pattern, stripped)
+                if not match:
+                    continue
+                token = match.group(1)
+                if skip_fn and skip_fn(token):
+                    continue
+                stripped = stripped[match.end():]
+                changed = True
+                break
+
+        return stripped.strip()
+
+    def _has_named_place_anchor(text: str) -> bool:
+        fragment = _strip_leading_admin_tokens(_extract_named_place_fragment(text))
+        fragment_norm = _normalize_text(fragment)
+        if len(fragment_norm) < 4:
+            return False
+        return not _is_weak_area_fragment(fragment)
+
+    def _should_reject_place_less_unique_match(candidate_input: str) -> bool:
+        candidate_input = _to_str(candidate_input)
+        if not candidate_input:
+            return False
+
+        has_specific_detail = bool(
+            _has_building_or_room(candidate_input) or _extract_house_name(candidate_input)
+        )
+        if not has_specific_detail:
+            return False
+
+        if _has_place_anchor(candidate_input) or _has_named_place_anchor(candidate_input):
+            return False
+
+        return True
+
     def _replace_recorded_address_in_reply(reply_text: str, old_address: str, new_address: str) -> str:
         reply_text = _to_str(reply_text)
         old_address = _to_str(old_address)
@@ -675,12 +773,17 @@ def main(
         return best_address, best_reply
 
     def _filter_by_named_place_fragment(fragment: str, addresses: list) -> list:
-        fragment_norm = _normalize_text(fragment)
-        if len(fragment_norm) < 4:
+        fragment_norms = []
+        for value in (_to_str(fragment), _strip_leading_admin_tokens(fragment)):
+            norm = _normalize_text(value)
+            if len(norm) >= 4 and norm not in fragment_norms:
+                fragment_norms.append(norm)
+
+        if not fragment_norms:
             return []
         return [
             address for address in addresses
-            if fragment_norm and fragment_norm in _normalize_text(address)
+            if any(fragment_norm in _normalize_text(address) for fragment_norm in fragment_norms)
         ]
 
     def _should_restart_matching_from_completed(text: str, addresses: list) -> bool:
@@ -884,23 +987,36 @@ def main(
     )
     current_matched_index = -1 if current_state == "matching" else _to_int(matched_index, -1)
 
-    prev_unmatched = _to_str(last_unmatched_address)
+    prev_unmatched_raw = _to_str(last_unmatched_address)
+    prev_unmatched = _strip_non_merge_history(prev_unmatched_raw)
+    mergeable_prev_unmatched = "" if _is_non_merge_history(prev_unmatched_raw) else prev_unmatched
 
     current_input = current_raw_input
-    if prev_unmatched and current_raw_input and _is_fragment_like(current_raw_input):
+    should_merge_named_place_with_previous = bool(
+        mergeable_prev_unmatched
+        and current_raw_input
+        and _has_named_place_anchor(current_raw_input)
+        and _has_building_or_room(mergeable_prev_unmatched)
+    )
+    if mergeable_prev_unmatched and current_raw_input and (
+        _is_fragment_like(current_raw_input) or should_merge_named_place_with_previous
+    ):
         ncur = _normalize_text(current_raw_input)
-        nprev = _normalize_text(prev_unmatched)
+        nprev = _normalize_text(mergeable_prev_unmatched)
 
         if ncur == nprev or ncur in nprev:
-            current_input = prev_unmatched
-        elif nprev and ncur.startswith(nprev):
+            current_input = mergeable_prev_unmatched
+        elif nprev and nprev in ncur:
             current_input = current_raw_input
-        elif _has_place_anchor(current_raw_input) and _has_building_or_room(prev_unmatched):
-            current_input = f"{current_raw_input}{prev_unmatched}"
+        elif (
+            (_has_place_anchor(current_raw_input) or _has_named_place_anchor(current_raw_input))
+            and _has_building_or_room(mergeable_prev_unmatched)
+        ):
+            current_input = f"{mergeable_prev_unmatched}{current_raw_input}"
         else:
-            current_input = f"{prev_unmatched}{current_raw_input}"
-    elif prev_unmatched and current_raw_input and _should_merge_region_continuation(prev_unmatched, current_raw_input):
-        current_input = f"{prev_unmatched}{current_raw_input}"
+            current_input = f"{mergeable_prev_unmatched}{current_raw_input}"
+    elif mergeable_prev_unmatched and current_raw_input and _should_merge_region_continuation(mergeable_prev_unmatched, current_raw_input):
+        current_input = f"{mergeable_prev_unmatched}{current_raw_input}"
 
     prev_repeat_count = max(_to_int(similar_no_match_count, 0), 0)
 
@@ -935,7 +1051,7 @@ def main(
             }
         return {
             "llm_result": llm_result,
-            "next_last_unmatched_address": prev_unmatched,
+            "next_last_unmatched_address": prev_unmatched_raw,
             "next_similar_no_match_count": prev_repeat_count
         }
 
@@ -945,7 +1061,11 @@ def main(
     is_extract_failed = _to_bool(llm_result.get("is_extract_failed", llm_result.get("extract_failed", False)))
     reply = _to_str(llm_result.get("reply"))
     recorded_address_from_reply = _extract_recorded_address_from_reply(reply)
-    sanitized_recorded_address = _sanitize_recorded_address(recorded_address_from_reply, current_input, prev_unmatched)
+    sanitized_recorded_address = _sanitize_recorded_address(
+        recorded_address_from_reply,
+        current_input,
+        mergeable_prev_unmatched
+    )
     if sanitized_recorded_address != recorded_address_from_reply:
         reply = _replace_recorded_address_in_reply(
             reply,
@@ -958,7 +1078,10 @@ def main(
 
     if llm_matched_index >= 0 and 0 <= llm_matched_index < len(address_list):
         selected_address = _to_str(address_list[llm_matched_index])
-        if _has_strong_conflict(current_input, selected_address):
+        if (
+            _has_strong_conflict(current_input, selected_address)
+            or _has_precise_detail_conflict(current_input, selected_address)
+        ):
             llm_matched_index = -1
             match_count = 0
             is_completed = False
@@ -998,9 +1121,25 @@ def main(
     if llm_matched_index >= 0 and match_count <= 0:
         match_count = 1
 
-    if current_state == "matching" and llm_matched_index < 0 and match_count == 0 and not is_completed and not is_extract_failed:
+    if (
+        current_state == "matching"
+        and llm_matched_index >= 0
+        and match_count == 1
+        and _should_reject_place_less_unique_match(current_input)
+    ):
+        llm_matched_index = -1
+        match_count = 0
+        is_completed = False
+        reply = ""
+
+    precise_matched_index = -1
+    if current_state == "matching" and not is_completed and not is_extract_failed:
         precise_matched_index = _find_precise_unique_match(current_input, address_list)
-        if precise_matched_index >= 0:
+        if precise_matched_index >= 0 and (
+            llm_matched_index < 0
+            or match_count == 0
+            or llm_matched_index != precise_matched_index
+        ):
             llm_matched_index = precise_matched_index
             match_count = 1
             reply = ""
@@ -1016,14 +1155,23 @@ def main(
         current_input
         and current_looks_like_address
         and _needs_specific_place_followup(current_input)
-        and not (not prev_unmatched and current_is_layer_missing and not _has_any_core_region_overlap(current_input, address_list))
+        and not (
+            not mergeable_prev_unmatched
+            and current_is_layer_missing
+            and not _has_any_core_region_overlap(current_input, address_list)
+        )
+    )
+    should_force_correct_complete = bool(
+        not mergeable_prev_unmatched
+        and current_is_layer_missing
+        and not _has_any_core_region_overlap(current_input, address_list)
     )
 
     custom_followup_reply = ""
     custom_recorded_address = ""
     if current_state == "matching" and llm_matched_index < 0 and match_count == 0 and not is_completed:
         custom_followup_reply, custom_recorded_address = _build_precise_followup(
-            prev_unmatched,
+            mergeable_prev_unmatched,
             current_input,
             address_list
         )
@@ -1033,7 +1181,7 @@ def main(
                 reply,
                 custom_recorded_address,
                 custom_followup_reply,
-                prev_unmatched,
+                mergeable_prev_unmatched,
                 current_input
             )
 
@@ -1045,6 +1193,12 @@ def main(
         and bool(current_input)
         and (current_looks_like_address or bool(recorded_address_from_reply) or bool(custom_recorded_address))
     )
+    should_reset_unmatched_for_broad_no_overlap = (
+        should_track_unmatched
+        and not mergeable_prev_unmatched
+        and current_is_layer_missing
+        and not _has_any_core_region_overlap(current_input, address_list)
+    )
 
     if should_track_unmatched:
         if prev_unmatched and _is_similar(current_input, prev_unmatched) and not _is_extension_of_previous(current_input, prev_unmatched):
@@ -1055,6 +1209,9 @@ def main(
             reply = ""
             next_last_unmatched_address = ""
             next_similar_no_match_count = 0
+        elif should_reset_unmatched_for_broad_no_overlap:
+            next_last_unmatched_address = _mark_non_merge_history(current_input)
+            next_similar_no_match_count = 1
         else:
             next_last_unmatched_address = (
                 recorded_address_from_reply
@@ -1067,7 +1224,7 @@ def main(
             next_last_unmatched_address = ""
             next_similar_no_match_count = 0
         else:
-            next_last_unmatched_address = prev_unmatched
+            next_last_unmatched_address = prev_unmatched_raw
             next_similar_no_match_count = prev_repeat_count
 
     REPLY_LAYER = "好的，请您再说一下具体的小区或村镇名称。"
@@ -1104,24 +1261,24 @@ def main(
         elif (
             current_looks_like_address
             and _has_building_or_room(current_input)
-            and not _has_place_anchor(current_input)
-            and not prev_unmatched
+            and not (_has_place_anchor(current_input) or _has_named_place_anchor(current_input))
         ):
             reply = f"我记录的地址信息是：{current_input}，请您再说一下具体的小区或村镇名称。"
         elif should_echo_partial_address:
             reply = f"\u6211\u8bb0\u5f55\u7684\u5730\u5740\u4fe1\u606f\u662f\uff1a{current_input}\uff0c\u8bf7\u60a8\u518d\u8bf4\u4e00\u4e0b\u5177\u4f53\u7684\u5c0f\u533a\u6216\u6751\u9547\u540d\u79f0\u3002"
         elif reply == REPLY_LAYER or _is_exact_layer_reply(reply):
-            if not prev_unmatched and current_is_layer_missing and not _has_any_core_region_overlap(current_input, address_list):
+            if should_force_correct_complete:
                 reply = REPLY_CORRECT
             elif current_address_level >= 5:
                 reply = REPLY_CORRECT
         elif reply in {REPLY_DETAIL, REPLY_CORRECT}:
-            pass
+            if should_force_correct_complete:
+                reply = REPLY_CORRECT
         else:
             if not current_input:
                 reply = REPLY_DETAIL
             elif current_is_layer_missing:
-                reply = REPLY_LAYER
+                reply = REPLY_CORRECT if should_force_correct_complete else REPLY_LAYER
             elif current_looks_like_address:
                 reply = REPLY_CORRECT
             else:
@@ -1146,6 +1303,3 @@ def main(
         "next_last_unmatched_address": next_last_unmatched_address,
         "next_similar_no_match_count": next_similar_no_match_count
     }
-
-
-
