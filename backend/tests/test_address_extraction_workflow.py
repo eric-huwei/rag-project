@@ -93,6 +93,16 @@ def _load_build_llm_message_main():
     )
 
 
+def _load_workflow_state_main():
+    return _load_code_main(
+        lambda code: (
+            "# 后处理状态" in code
+            and "cleanHistory" in code
+            and "match_failed" in code
+        )
+    )
+
+
 class AddressExtractionWorkflowTests(unittest.TestCase):
     def test_town_level_address_echoes_on_first_followup(self) -> None:
         main = _load_address_postprocess_main()
@@ -260,12 +270,50 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             llm_result={"reply": ""},
         )
 
-        self.assertEqual(result["reply"], "\u62b1\u6b49\u60a8\u63d0\u4f9b\u7684\u5730\u5740\u5339\u914d\u4e0d\u4e0a\u3002")
+        self.assertEqual(result["reply"], "\u62b1\u6b49\u60a8\u63d0\u4f9b\u7684\u5730\u5740\u4e0d\u6b63\u786e\u3002")
 
         final_output_code = _load_final_output_code()
         self.assertIn('content: isFailed ? failedReply : reply', final_output_code)
         self.assertIn('IsEnd: isFailed ? "-1"', final_output_code)
         self.assertNotIn('startsWith("请问您说的是")', final_output_code)
+
+    def test_confirming_irrelevant_input_repeats_previous_confirm_address(self) -> None:
+        main = _load_build_output_main()
+
+        result = main(
+            data={
+                "match_failed": False,
+                "is_completed": False,
+                "state": "confirming",
+                "matched_index": 0,
+                "matched_account": "福州市岳峰镇保利香槟国际东区三号楼1201",
+            },
+            llm_result={"match_count": 1, "reply": ""},
+            user_spoken_address="数据量时间段",
+            clean_user_input="数据量时间段",
+            last_unmatched_address="",
+        )
+
+        self.assertEqual(result["reply"], "请问您说的是保利香槟国际东区三号楼1201吗？")
+
+    def test_confirming_overlapping_partial_fragment_reuses_previous_confirm_phrase(self) -> None:
+        main = _load_build_output_main()
+
+        result = main(
+            data={
+                "match_failed": False,
+                "is_completed": False,
+                "state": "confirming",
+                "matched_index": 0,
+                "matched_account": "福州市岳峰镇保利香槟国际东区三号楼1201",
+            },
+            llm_result={"match_count": 1, "reply": ""},
+            user_spoken_address="3号楼",
+            clean_user_input="3号楼",
+            last_unmatched_address="",
+        )
+
+        self.assertEqual(result["reply"], "请问您说的是1201保利香槟国际吗？")
 
     def test_build_llm_message_keeps_full_clean_address_and_base_address(self) -> None:
         main = _load_build_llm_message_main()
@@ -632,6 +680,784 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(result["next_last_unmatched_address"], "8号楼2102")
         self.assertEqual(result["next_similar_no_match_count"], 1)
 
+    def test_building_without_room_requests_only_room_number(self) -> None:
+        main = _load_address_postprocess_main()
+
+        result = main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="中山路八号楼",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=[
+                "广东省深圳市中山路八号楼2103",
+                "广东省深圳市中山路八号楼2102",
+            ],
+        )
+
+        self.assertEqual(
+            result["llm_result"]["reply"],
+            "我记录的地址信息是：中山路八号楼，请您再提供下门牌号信息",
+        )
+        self.assertEqual(result["next_last_unmatched_address"], "中山路八号楼")
+        self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_room_number_fragment_with_candidate_overlap_records_and_requests_place(self) -> None:
+        main = _load_address_postprocess_main()
+
+        result = main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="2103",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=[
+                "广东省深圳市中山路八号楼2103",
+                "广东省深圳市中山路八号楼2102",
+            ],
+        )
+
+        self.assertEqual(
+            result["llm_result"]["reply"],
+            "我记录的地址信息是：2103，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(result["next_last_unmatched_address"], "2103")
+        self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_building_fragment_after_room_number_keeps_combined_recorded_address(self) -> None:
+        postprocess_main = _load_address_postprocess_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "广东省深圳市中山路八号楼2103",
+            "广东省深圳市中山路八号楼2102",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="2103",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="八号楼",
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            second_turn["llm_result"]["reply"],
+            "我记录的地址信息是：2103八号楼，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(second_turn["next_last_unmatched_address"], "2103八号楼")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 1)
+
+        output = build_output_main(
+            data={
+                "match_failed": False,
+                "is_completed": False,
+                "state": "matching",
+                "matched_index": -1,
+                "matched_account": "",
+            },
+            llm_result=second_turn["llm_result"],
+            user_spoken_address="八号楼",
+            clean_user_input="八号楼",
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(
+            output["reply"],
+            "我记录的地址信息是：2103八号楼，请您再说一下具体的小区或村镇名称。",
+        )
+
+    def test_build_llm_message_merges_weak_area_fragment_with_previous_overlap_address(self) -> None:
+        main = _load_build_llm_message_main()
+
+        result = main(
+            {
+                "userInput": "东区",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "1201三号楼",
+                "similar_no_match_count": 1,
+                "kdRecords": [
+                    "福州市岳峰镇保利香槟国际东区三号楼1201",
+                    "福州市岳峰镇保利香槟国际东区三号楼1200",
+                ],
+            }
+        )
+
+        self.assertIn("User: 1201三号楼东区", result["user_message"])
+        self.assertEqual(result["effective_match_input"], "1201三号楼东区")
+
+    def test_overlap_fragments_keep_concatenating_across_three_turns(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+        postprocess_main = _load_address_postprocess_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "福州市岳峰镇保利香槟国际东区三号楼1201",
+            "福州市岳峰镇保利香槟国际东区三号楼1200",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="1201",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            first_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1201，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(first_turn["next_last_unmatched_address"], "1201")
+
+        second_built = build_llm_message_main(
+            {
+                "userInput": "三号楼",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": first_turn["next_last_unmatched_address"],
+                "similar_no_match_count": first_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+
+        self.assertEqual(second_built["effective_match_input"], "1201三号楼")
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=second_built["effective_match_input"],
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            second_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1201三号楼，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(second_turn["next_last_unmatched_address"], "1201三号楼")
+
+        third_built = build_llm_message_main(
+            {
+                "userInput": "东区",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": second_turn["next_last_unmatched_address"],
+                "similar_no_match_count": second_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+
+        self.assertEqual(third_built["effective_match_input"], "1201三号楼东区")
+
+        third_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=third_built["effective_match_input"],
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            third_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1201三号楼东区，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(third_turn["next_last_unmatched_address"], "1201三号楼东区")
+
+        output = build_output_main(
+            data={
+                "match_failed": False,
+                "is_completed": False,
+                "state": "matching",
+                "matched_index": -1,
+                "matched_account": "",
+            },
+            llm_result=third_turn["llm_result"],
+            user_spoken_address=third_built["effective_match_input"],
+            clean_user_input=third_built["clean_user_input"],
+            last_unmatched_address=third_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(
+            output["reply"],
+            "我记录的地址信息是：1201三号楼东区，请您再说一下具体的小区或村镇名称。",
+        )
+
+    def test_non_overlapping_weak_area_does_not_merge_but_later_overlap_fragments_do(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+        postprocess_main = _load_address_postprocess_main()
+        state_main = _load_workflow_state_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "福州市岳峰镇保利香槟国际东区三号楼1201",
+            "福州市岳峰镇保利香槟国际东区三号楼1200",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="1200",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            first_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1200，请您再说一下具体的小区或村镇名称。",
+        )
+
+        second_built = build_llm_message_main(
+            {
+                "userInput": "三号楼",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": first_turn["next_last_unmatched_address"],
+                "similar_no_match_count": first_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+        self.assertEqual(second_built["effective_match_input"], "1200三号楼")
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=second_built["effective_match_input"],
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            second_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1200三号楼，请您再说一下具体的小区或村镇名称。",
+        )
+
+        third_built = build_llm_message_main(
+            {
+                "userInput": "南区",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": second_turn["next_last_unmatched_address"],
+                "similar_no_match_count": second_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+        self.assertEqual(third_built["effective_match_input"], "南区")
+
+        third_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=third_built["effective_match_input"],
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            third_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1200三号楼，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(third_turn["next_last_unmatched_address"], "1200三号楼")
+
+        fourth_built = build_llm_message_main(
+            {
+                "userInput": "东区",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": third_turn["next_last_unmatched_address"],
+                "similar_no_match_count": third_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+        self.assertEqual(fourth_built["effective_match_input"], "1200三号楼东区")
+
+        fourth_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=fourth_built["effective_match_input"],
+            last_unmatched_address=third_turn["next_last_unmatched_address"],
+            similar_no_match_count=third_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            fourth_turn["llm_result"]["reply"],
+            "我记录的地址信息是：1200三号楼东区，请您再说一下具体的小区或村镇名称。",
+        )
+
+        fifth_built = build_llm_message_main(
+            {
+                "userInput": "保利香槟国际",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": fourth_turn["next_last_unmatched_address"],
+                "similar_no_match_count": fourth_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+        self.assertEqual(fifth_built["effective_match_input"], "1200三号楼东区保利香槟国际")
+
+        fifth_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=fifth_built["effective_match_input"],
+            last_unmatched_address=fourth_turn["next_last_unmatched_address"],
+            similar_no_match_count=fourth_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(fifth_turn["llm_result"]["matched_index"], 1)
+        self.assertEqual(fifth_turn["llm_result"]["match_count"], 1)
+
+        fifth_state = state_main(fifth_turn["llm_result"], address=addresses, state="matching")
+        fifth_output = build_output_main(
+            data=fifth_state,
+            llm_result=fifth_turn["llm_result"],
+            user_spoken_address=fifth_built["effective_match_input"],
+            clean_user_input=fifth_built["clean_user_input"],
+            last_unmatched_address=fifth_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(
+            fifth_output["reply"],
+            "请问您说的是1200三号楼东区保利香槟国际吗？",
+        )
+
+    def test_confirming_overlap_followup_keeps_previous_confirm_reply(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+        postprocess_main = _load_address_postprocess_main()
+        state_main = _load_workflow_state_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "福州市岳峰镇保利香槟国际东区三号楼1201",
+            "福州市岳峰镇保利香槟国际东区三号楼1200",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="1201",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        second_built = build_llm_message_main(
+            {
+                "userInput": "保利香槟国际",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": first_turn["next_last_unmatched_address"],
+                "similar_no_match_count": first_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=second_built["effective_match_input"],
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        second_state = state_main(second_turn["llm_result"], address=addresses, state="matching")
+        second_output = build_output_main(
+            data=second_state,
+            llm_result=second_turn["llm_result"],
+            user_spoken_address=second_built["effective_match_input"],
+            clean_user_input=second_built["clean_user_input"],
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(second_output["reply"], "请问您说的是1201保利香槟国际吗？")
+
+        third_built = build_llm_message_main(
+            {
+                "userInput": "3号楼",
+                "state": second_state["state"],
+                "matchedIndex": second_state["matched_index"],
+                "last_unmatched_address": second_turn["next_last_unmatched_address"],
+                "similar_no_match_count": second_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+
+        third_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state=second_state["state"],
+            matched_index=second_state["matched_index"],
+            clean_user_input=third_built["effective_match_input"],
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        third_state = state_main(third_turn["llm_result"], address=addresses, state=second_state["state"])
+        third_output = build_output_main(
+            data=third_state,
+            llm_result=third_turn["llm_result"],
+            user_spoken_address=third_built["effective_match_input"],
+            clean_user_input=third_built["clean_user_input"],
+            last_unmatched_address=third_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(third_state["state"], "confirming")
+        self.assertEqual(third_state["matched_index"], 0)
+        self.assertEqual(third_output["reply"], second_output["reply"])
+
+    def test_unrelated_followups_keep_previous_recorded_reply_then_fail(self) -> None:
+        postprocess_main = _load_address_postprocess_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "广东省深圳市中山路八号楼2103",
+            "广东省深圳市中山路八号楼2102",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="中山路八号楼",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            first_turn["llm_result"]["reply"],
+            "我记录的地址信息是：中山路八号楼，请您再提供下门牌号信息",
+        )
+        self.assertEqual(first_turn["next_last_unmatched_address"], "中山路八号楼")
+        self.assertEqual(first_turn["next_similar_no_match_count"], 1)
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="3333",
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            second_turn["llm_result"]["reply"],
+            "我记录的地址信息是：中山路八号楼，请您再提供下门牌号信息",
+        )
+        self.assertEqual(second_turn["next_last_unmatched_address"], "中山路八号楼")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 2)
+
+        third_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="5555",
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertTrue(third_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(third_turn["llm_result"]["reply"], "")
+        self.assertEqual(third_turn["next_last_unmatched_address"], "")
+        self.assertEqual(third_turn["next_similar_no_match_count"], 0)
+
+        output = build_output_main(
+            data={
+                "match_failed": True,
+                "is_completed": False,
+                "state": "matching",
+                "matched_index": -1,
+                "matched_account": "",
+            },
+            llm_result=third_turn["llm_result"],
+            user_spoken_address="5555",
+            clean_user_input="5555",
+            last_unmatched_address=third_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(output["reply"], "抱歉您提供的地址不正确。")
+
+    def test_irrelevant_followup_after_road_and_building_keeps_previous_reply(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+        postprocess_main = _load_address_postprocess_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "中山路3号楼2101",
+            "中山路3号楼2102",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="中山路:",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            first_turn["llm_result"]["reply"],
+            "我记录的地址信息是：中山路:，请您再提供下楼号、单元号及门牌号信息。",
+        )
+
+        second_built = build_llm_message_main(
+            {
+                "userInput": "3号楼",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": first_turn["next_last_unmatched_address"],
+                "similar_no_match_count": first_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=second_built["effective_match_input"],
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            second_turn["llm_result"]["reply"],
+            "我记录的地址信息是：中山路:3号楼，请您再提供下单元号及门牌号信息。",
+        )
+
+        third_built = build_llm_message_main(
+            {
+                "userInput": "数据量时间段",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": second_turn["next_last_unmatched_address"],
+                "similar_no_match_count": second_turn["next_similar_no_match_count"],
+                "kdRecords": addresses,
+            }
+        )
+
+        self.assertEqual(third_built["effective_match_input"], "数据量时间段")
+
+        third_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=third_built["effective_match_input"],
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            third_turn["llm_result"]["reply"],
+            second_turn["llm_result"]["reply"],
+        )
+        self.assertEqual(
+            third_turn["next_last_unmatched_address"],
+            second_turn["next_last_unmatched_address"],
+        )
+
+        output = build_output_main(
+            data={
+                "match_failed": False,
+                "is_completed": False,
+                "state": "matching",
+                "matched_index": -1,
+                "matched_account": "",
+            },
+            llm_result=third_turn["llm_result"],
+            user_spoken_address=third_built["effective_match_input"],
+            clean_user_input=third_built["clean_user_input"],
+            last_unmatched_address=third_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(output["reply"], second_turn["llm_result"]["reply"])
+
     def test_full_precise_unmatched_address_requests_correct_complete_info(self) -> None:
         main = _load_address_postprocess_main()
         user_address = "\u5317\u4eac\u5e02\u5927\u540c\u533a\u767e\u82b1\u5c0f\u533a9\u680b1109"
@@ -812,7 +1638,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             last_unmatched_address=second_turn["next_last_unmatched_address"],
         )
 
-        self.assertEqual(output["reply"], "抱歉您提供的地址匹配不上。")
+        self.assertEqual(output["reply"], "抱歉您提供的地址不正确。")
 
     def test_broad_region_without_overlap_upgrades_detail_reply_to_correct_complete(self) -> None:
         postprocess_main = _load_address_postprocess_main()
@@ -840,6 +1666,103 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["reply"], "请您提供正确完整的地址信息")
         self.assertTrue(result["next_last_unmatched_address"].startswith("__NO_MERGE__:"))
         self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_confirming_two_irrelevant_turns_repeat_then_fail(self) -> None:
+        postprocess_main = _load_address_postprocess_main()
+        state_main = _load_workflow_state_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "福州市岳峰镇保利香槟国际东区三号楼1201",
+            "福州市岳峰镇保利香槟国际东区三号楼1200",
+        ]
+
+        first_turn = postprocess_main(
+            llm_result={
+                "matched_index": 0,
+                "match_count": 1,
+                "is_completed": False,
+                "reply": "",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="保利香槟国际东区三号楼1201",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        first_state = state_main(first_turn["llm_result"], address=addresses, state="matching")
+        first_output = build_output_main(
+            data=first_state,
+            llm_result=first_turn["llm_result"],
+            user_spoken_address="保利香槟国际东区三号楼1201",
+            clean_user_input="保利香槟国际东区三号楼1201",
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(first_output["reply"], "请问您说的是保利香槟国际东区三号楼1201吗？")
+
+        second_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": True, "reply": "请直接回答是或者不是。"},
+            state=first_state["state"],
+            matched_index=first_state["matched_index"],
+            clean_user_input="数据量时间段",
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        second_state = state_main(second_turn["llm_result"], address=addresses, state=first_state["state"])
+        second_output = build_output_main(
+            data=second_state,
+            llm_result=second_turn["llm_result"],
+            user_spoken_address="数据量时间段",
+            clean_user_input="数据量时间段",
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+        )
+
+        self.assertEqual(second_output["reply"], "请问您说的是保利香槟国际东区三号楼1201吗？")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 1)
+
+        third_turn = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "请您提供详细的地址信息",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": True, "reply": "请直接回答是或者不是。"},
+            state=second_state["state"],
+            matched_index=second_state["matched_index"],
+            clean_user_input="打发发呆",
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        third_state = state_main(third_turn["llm_result"], address=addresses, state=second_state["state"])
+        third_output = build_output_main(
+            data=third_state,
+            llm_result=third_turn["llm_result"],
+            user_spoken_address="打发发呆",
+            clean_user_input="打发发呆",
+            last_unmatched_address=third_turn["next_last_unmatched_address"],
+        )
+
+        self.assertTrue(third_turn["llm_result"]["is_extract_failed"])
+        self.assertTrue(third_state["match_failed"])
+        self.assertEqual(third_output["reply"], "抱歉您提供的地址不正确。")
 
 
 if __name__ == "__main__":
