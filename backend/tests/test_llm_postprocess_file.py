@@ -158,7 +158,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 0)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:安徽省汤池镇百花小区9栋1109",
+        )
 
     def test_omitted_city_town_overrides_llm_no_match_when_precise(self) -> None:
         main = _load_llm_postprocess_main()
@@ -186,7 +189,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 0)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:安徽省庐江县百花小区9栋1109",
+        )
 
     def test_town_community_room_overrides_llm_no_match_when_precise(self) -> None:
         main = _load_llm_postprocess_main()
@@ -214,7 +220,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 0)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:汤池镇百花小区9栋1109",
+        )
 
     def test_precise_room_conflict_overrides_llm_wrong_unique_match(self) -> None:
         main = _load_llm_postprocess_main()
@@ -242,7 +251,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 1)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:州市鼓楼区保利香槟国际8号楼2101",
+        )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_precise_room_conflict_demotes_single_wrong_candidate(self) -> None:
@@ -419,7 +431,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 0)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:保利香槟三号楼1201",
+        )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_named_place_fragment_merges_with_previous_building_room_and_matches(self) -> None:
@@ -448,7 +463,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 0)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:三号楼1201保利香槟",
+        )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_premerged_named_place_input_does_not_duplicate_previous_building_room(self) -> None:
@@ -477,7 +495,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 0)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:保利香槟三号楼1201",
+        )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_road_only_gets_precise_followup_instead_of_correct_complete(self) -> None:
@@ -662,7 +683,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], 1)
         self.assertEqual(result["llm_result"]["match_count"], 1)
         self.assertEqual(result["llm_result"]["reply"], "")
-        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(
+            result["next_last_unmatched_address"],
+            "__NO_MERGE__:8号楼2102中山路",
+        )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_broad_region_without_candidate_overlap_requests_correct_complete(self) -> None:
