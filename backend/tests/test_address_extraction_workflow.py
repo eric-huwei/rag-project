@@ -7,7 +7,7 @@ import unittest
 
 def _load_code_main(predicate):
     workflow_path = next(Path(__file__).resolve().parents[1].glob("*.json"))
-    workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    workflow = json.loads(workflow_path.read_text(encoding="utf-8-sig"))
 
     code_blocks: list[str] = []
 
@@ -57,7 +57,7 @@ def _load_build_output_main():
 
 def _load_final_output_code():
     workflow_path = next(Path(__file__).resolve().parents[1].glob("*.json"))
-    workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    workflow = json.loads(workflow_path.read_text(encoding="utf-8-sig"))
 
     code_blocks: list[str] = []
 
@@ -1029,6 +1029,116 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             )
 
             self.assertEqual(output["reply"], expected_reply)
+            state = data["state"]
+            matched_index = data["matched_index"]
+            last_unmatched = post["next_last_unmatched_address"]
+            similar_count = post["next_similar_no_match_count"]
+
+    def test_beijing_prefix_from_candidate_is_not_spoken_in_recorded_or_confirm_reply(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+        postprocess_main = _load_address_postprocess_main()
+        state_main = _load_workflow_state_main()
+        build_output_main = _load_build_output_main()
+
+        addresses = [
+            "北京市朝阳区建国路88号现代城5号楼1单元101室",
+            "北京市朝阳区建国路88号现代城5号楼1单元105室",
+        ]
+        turns = [
+            (
+                "朝阳区",
+                {
+                    "matched_index": -1,
+                    "match_count": 0,
+                    "is_completed": False,
+                    "reply": "好的，请您再说一下具体的小区或村镇名称。",
+                    "is_extract_failed": False,
+                },
+                "我记录的地址信息是：朝阳区，请您再说一下具体的小区或村镇名称。",
+            ),
+            (
+                "建国路88号",
+                {
+                    "matched_index": -1,
+                    "match_count": 0,
+                    "is_completed": False,
+                    "reply": "我记录的地址信息是：北京市朝阳区建国路88号，请您再说一下具体的小区或村镇名称。",
+                    "is_extract_failed": False,
+                },
+                "我记录的地址信息是：朝阳区建国路88号，请您再说一下具体的小区或村镇名称。",
+            ),
+            (
+                "现代城",
+                {
+                    "matched_index": -1,
+                    "match_count": 0,
+                    "is_completed": False,
+                    "reply": "我记录的地址信息是：北京市朝阳区建国路88号现代城，请您再说一下具体的楼栋号、单元号及门牌号。",
+                    "is_extract_failed": False,
+                },
+                "我记录的地址信息是：朝阳区建国路88号现代城，请您再说一下具体的楼栋号、单元号及门牌号。",
+            ),
+            (
+                "5号楼",
+                {
+                    "matched_index": -1,
+                    "match_count": 0,
+                    "is_completed": False,
+                    "reply": "我记录的地址信息是：北京市朝阳区建国路88号现代城5号楼，请您再说一下具体的单元号及门牌号。",
+                    "is_extract_failed": False,
+                },
+                "我记录的地址信息是：朝阳区建国路88号现代城5号楼，请您再说一下具体的单元号及门牌号。",
+            ),
+            (
+                "1单元101室",
+                {
+                    "matched_index": 0,
+                    "match_count": 1,
+                    "is_completed": False,
+                    "reply": "",
+                    "is_extract_failed": False,
+                },
+                "请问您说的是朝阳区建国路88号现代城5号楼1单元101室吗？",
+            ),
+        ]
+
+        state = "matching"
+        matched_index = -1
+        last_unmatched = ""
+        similar_count = 0
+
+        for user_input, llm_result, expected_reply in turns:
+            built = build_llm_message_main(
+                {
+                    "userInput": user_input,
+                    "state": state,
+                    "matchedIndex": matched_index,
+                    "last_unmatched_address": last_unmatched,
+                    "similar_no_match_count": similar_count,
+                    "kdRecords": addresses,
+                }
+            )
+            post = postprocess_main(
+                llm_result=llm_result,
+                meaningless_result={"is_meaningless": False, "reply": ""},
+                state=state,
+                matched_index=matched_index,
+                clean_user_input=built["effective_match_input"],
+                last_unmatched_address=last_unmatched,
+                similar_no_match_count=similar_count,
+                address_list=addresses,
+            )
+            data = state_main(post["llm_result"], address=addresses, state=state)
+            output = build_output_main(
+                data=data,
+                llm_result=post["llm_result"],
+                user_spoken_address=built["effective_match_input"],
+                clean_user_input=built["clean_user_input"],
+                last_unmatched_address=post["next_last_unmatched_address"],
+            )
+
+            self.assertEqual(output["reply"], expected_reply)
+            self.assertNotIn("北京市", output["reply"])
             state = data["state"]
             matched_index = data["matched_index"]
             last_unmatched = post["next_last_unmatched_address"]

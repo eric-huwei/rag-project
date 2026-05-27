@@ -375,6 +375,39 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["next_last_unmatched_address"], "福州市岳峰镇保利香槟")
         self.assertNotIn("国际东区三号楼", result["llm_result"]["reply"])
 
+    def test_recorded_reply_does_not_prepend_candidate_prefix(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": (
+                    "我记录的地址信息是：北京市朝阳区建国路88号，"
+                    "请您再说一下具体的小区或村镇名称。"
+                ),
+                "is_extract_failed": False,
+            },
+            clean_user_input="朝阳区建国路88号",
+            last_unmatched_address="朝阳区",
+            similar_no_match_count=1,
+            address_list=[
+                "北京市朝阳区建国路88号现代城5号楼1单元101室",
+                "北京市朝阳区建国路88号现代城5号楼1单元105室",
+            ],
+        )
+
+        self.assertEqual(
+            result["llm_result"]["reply"],
+            "我记录的地址信息是：朝阳区建国路88号，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(result["next_last_unmatched_address"], "朝阳区建国路88号")
+        self.assertNotIn("北京市", result["llm_result"]["reply"])
+
     def test_named_place_fragment_gets_recorded_followup(self) -> None:
         main = _load_llm_postprocess_main()
 

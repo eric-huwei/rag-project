@@ -11,7 +11,7 @@ def _load_main():
     else:
         workflow_path = Path.cwd() / "backend/地址抽取.json"
 
-    workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    workflow = json.loads(workflow_path.read_text(encoding="utf-8-sig"))
 
     code_blocks: list[str] = []
 
