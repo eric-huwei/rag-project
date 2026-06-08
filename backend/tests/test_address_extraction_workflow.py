@@ -477,6 +477,86 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(result["effective_match_input"], "普美镇")
         self.assertNotIn("1201莆美镇", result["user_message"])
 
+    def test_intro_noise_and_candidate_suffix_are_stripped_from_recorded_followup(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+        postprocess_main = _load_address_postprocess_main()
+
+        addresses = [
+            "福州市岳峰镇保利香槟国际东区三号楼1201",
+            "福州市岳峰镇保利香槟国际东区三号楼1200",
+        ]
+
+        built = build_llm_message_main(
+            {
+                "userInput": "我住在福州市岳峰镇保利香槟国际",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "",
+                "similar_no_match_count": 0,
+                "kdRecords": addresses,
+            }
+        )
+
+        self.assertEqual(built["clean_user_input"], "福州市岳峰镇保利香槟国际")
+        self.assertEqual(built["effective_match_input"], "福州市岳峰镇保利香槟国际")
+        self.assertNotIn("我住在", built["user_message"])
+        self.assertIn("\nUser: 福州市岳峰镇保利香槟国际", built["user_message"])
+        self.assertNotIn("\nUser: 福州市岳峰镇保利香槟国际东区", built["user_message"])
+
+        located_by_candidate = build_llm_message_main(
+            {
+                "userInput": "麻烦帮我查一下福州市岳峰镇保利香槟国际",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "",
+                "similar_no_match_count": 0,
+                "kdRecords": addresses,
+            }
+        )
+
+        self.assertEqual(located_by_candidate["clean_user_input"], "福州市岳峰镇保利香槟国际")
+        self.assertNotIn("麻烦", located_by_candidate["user_message"])
+
+        omitted_middle_candidate_text = build_llm_message_main(
+            {
+                "userInput": "麻烦查一下保利香槟3号楼1200",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "",
+                "similar_no_match_count": 0,
+                "kdRecords": addresses,
+            }
+        )
+
+        self.assertEqual(omitted_middle_candidate_text["clean_user_input"], "保利香槟3号楼1200")
+        self.assertIn("\nUser: 保利香槟3号楼1200", omitted_middle_candidate_text["user_message"])
+        self.assertNotIn("user-spoken scope: 保利香槟国际东区", omitted_middle_candidate_text["user_message"])
+        self.assertNotIn("\nUser: 保利香槟国际东区", omitted_middle_candidate_text["user_message"])
+        self.assertNotIn("麻烦", omitted_middle_candidate_text["user_message"])
+
+        result = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "我记录的地址信息是：福州市岳峰镇保利香槟国际东区，请您再说一下具体的小区或村镇名称。",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input=built["effective_match_input"],
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertEqual(
+            result["llm_result"]["reply"],
+            "我记录的地址信息是：福州市岳峰镇保利香槟国际，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(result["next_last_unmatched_address"], "福州市岳峰镇保利香槟国际")
+
     def test_case_five_named_place_followup_matches_after_premerge(self) -> None:
         build_llm_message_main = _load_build_llm_message_main()
         postprocess_main = _load_address_postprocess_main()
@@ -1454,7 +1534,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             "我记录的地址信息是：中山路八号楼，请您再提供下门牌号信息",
         )
         self.assertEqual(result["next_last_unmatched_address"], "中山路八号楼")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_room_number_fragment_with_candidate_overlap_records_and_requests_place(self) -> None:
         main = _load_address_postprocess_main()
@@ -2168,7 +2248,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             "我记录的地址信息是：中山路八号楼，请您再提供下门牌号信息",
         )
         self.assertEqual(first_turn["next_last_unmatched_address"], "中山路八号楼")
-        self.assertEqual(first_turn["next_similar_no_match_count"], 1)
+        self.assertEqual(first_turn["next_similar_no_match_count"], 0)
 
         second_turn = postprocess_main(
             llm_result={
@@ -2189,48 +2269,11 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
 
         self.assertEqual(
             second_turn["llm_result"]["reply"],
-            "我记录的地址信息是：中山路八号楼，请您再提供下门牌号信息",
+            first_turn["llm_result"]["reply"],
         )
-        self.assertEqual(second_turn["next_last_unmatched_address"], "中山路八号楼")
-        self.assertEqual(second_turn["next_similar_no_match_count"], 2)
+        self.assertEqual(second_turn["next_last_unmatched_address"], first_turn["next_last_unmatched_address"])
+        self.assertEqual(second_turn["next_similar_no_match_count"], 1)
 
-        third_turn = postprocess_main(
-            llm_result={
-                "matched_index": -1,
-                "match_count": 0,
-                "is_completed": False,
-                "reply": "请您提供详细的地址信息",
-                "is_extract_failed": False,
-            },
-            meaningless_result={"is_meaningless": False, "reply": ""},
-            state="matching",
-            matched_index=-1,
-            clean_user_input="5555",
-            last_unmatched_address=second_turn["next_last_unmatched_address"],
-            similar_no_match_count=second_turn["next_similar_no_match_count"],
-            address_list=addresses,
-        )
-
-        self.assertTrue(third_turn["llm_result"]["is_extract_failed"])
-        self.assertEqual(third_turn["llm_result"]["reply"], "")
-        self.assertEqual(third_turn["next_last_unmatched_address"], "")
-        self.assertEqual(third_turn["next_similar_no_match_count"], 0)
-
-        output = build_output_main(
-            data={
-                "match_failed": True,
-                "is_completed": False,
-                "state": "matching",
-                "matched_index": -1,
-                "matched_account": "",
-            },
-            llm_result=third_turn["llm_result"],
-            user_spoken_address="5555",
-            clean_user_input="5555",
-            last_unmatched_address=third_turn["next_last_unmatched_address"],
-        )
-
-        self.assertEqual(output["reply"], "抱歉您提供的地址不正确。")
 
     def test_build_llm_message_does_not_premerge_unrelated_room_followup(self) -> None:
         build_llm_message_main = _load_build_llm_message_main()
@@ -2297,55 +2340,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             second_turn["next_last_unmatched_address"],
             first_turn["next_last_unmatched_address"],
         )
-        self.assertEqual(second_turn["next_similar_no_match_count"], 2)
-
-        third_built = build_llm_message_main(
-            {
-                "userInput": "5555",
-                "state": "matching",
-                "matchedIndex": -1,
-                "last_unmatched_address": second_turn["next_last_unmatched_address"],
-                "similar_no_match_count": second_turn["next_similar_no_match_count"],
-                "kdRecords": addresses,
-            }
-        )
-
-        self.assertEqual(third_built["effective_match_input"], "5555")
-
-        third_turn = postprocess_main(
-            llm_result={
-                "matched_index": -1,
-                "match_count": 0,
-                "is_completed": False,
-                "reply": "请您提供详细的地址信息",
-                "is_extract_failed": False,
-            },
-            meaningless_result={"is_meaningless": False, "reply": ""},
-            state="matching",
-            matched_index=-1,
-            clean_user_input=third_built["effective_match_input"],
-            last_unmatched_address=second_turn["next_last_unmatched_address"],
-            similar_no_match_count=second_turn["next_similar_no_match_count"],
-            address_list=addresses,
-        )
-
-        self.assertTrue(third_turn["llm_result"]["is_extract_failed"])
-
-        output = build_output_main(
-            data={
-                "match_failed": True,
-                "is_completed": False,
-                "state": "matching",
-                "matched_index": -1,
-                "matched_account": "",
-            },
-            llm_result=third_turn["llm_result"],
-            user_spoken_address=third_built["effective_match_input"],
-            clean_user_input=third_built["clean_user_input"],
-            last_unmatched_address=third_turn["next_last_unmatched_address"],
-        )
-
-        self.assertEqual(output["reply"], "抱歉您提供的地址不正确。")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 1)
 
     def test_road_only_then_building_room_confirms_combined_address(self) -> None:
         build_llm_message_main = _load_build_llm_message_main()
@@ -2570,6 +2565,216 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["reply"], recorded_reply)
         self.assertEqual(result["next_last_unmatched_address"], user_address)
 
+    def test_repeating_recorded_no_match_address_triggers_extract_failed(self) -> None:
+        main = _load_address_postprocess_main()
+        user_address = "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1109"
+
+        result = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "\u8bf7\u60a8\u63d0\u4f9b\u8be6\u7ec6\u7684\u5730\u5740\u4fe1\u606f",
+                "is_extract_failed": False,
+            },
+            clean_user_input=user_address,
+            last_unmatched_address=user_address,
+            similar_no_match_count=1,
+            address_list=[
+                "\u5b89\u5fbd\u7701\u5408\u80a5\u5e02\u5e90\u6c5f\u53bf"
+                "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1019",
+                "\u5b89\u5fbd\u7701\u5408\u80a5\u5e02\u5e90\u6c5f\u53bf"
+                "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1020",
+            ],
+        )
+
+        self.assertTrue(result["llm_result"]["is_extract_failed"])
+        self.assertEqual(result["llm_result"]["reply"], "")
+        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(result["next_similar_no_match_count"], 0)
+
+    def test_same_recorded_no_match_address_increments_before_failure(self) -> None:
+        main = _load_address_postprocess_main()
+        user_address = "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1109"
+        addresses = [
+            "\u5b89\u5fbd\u7701\u5408\u80a5\u5e02\u5e90\u6c5f\u53bf"
+            "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1019",
+            "\u5b89\u5fbd\u7701\u5408\u80a5\u5e02\u5e90\u6c5f\u53bf"
+            "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1020",
+        ]
+
+        first_turn = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "\u8bf7\u60a8\u63d0\u4f9b\u8be6\u7ec6\u7684\u5730\u5740\u4fe1\u606f",
+                "is_extract_failed": False,
+            },
+            clean_user_input=user_address,
+            last_unmatched_address=user_address,
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertFalse(first_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(first_turn["next_last_unmatched_address"], user_address)
+        self.assertEqual(first_turn["next_similar_no_match_count"], 1)
+
+        second_turn = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "\u8bf7\u60a8\u63d0\u4f9b\u8be6\u7ec6\u7684\u5730\u5740\u4fe1\u606f",
+                "is_extract_failed": False,
+            },
+            clean_user_input=user_address,
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertTrue(second_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(second_turn["next_last_unmatched_address"], "")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 0)
+
+    def test_repeated_meaningless_matching_input_counts_and_fails(self) -> None:
+        main = _load_address_postprocess_main()
+        addresses = [
+            "\u798f\u5dde\u5e02\u5cb3\u5cf0\u9547\u4fdd\u5229\u9999\u69df\u56fd\u9645\u4e1c\u533a\u4e09\u53f7\u697c1201",
+            "\u798f\u5dde\u5e02\u5cb3\u5cf0\u9547\u4fdd\u5229\u9999\u69df\u56fd\u9645\u4e1c\u533a\u4e09\u53f7\u697c1200",
+        ]
+
+        first_turn = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": True, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "\u8bf7\u60a8\u63d0\u4f9b\u8be6\u7ec6\u7684\u5730\u5740\u4fe1\u606f",
+                "is_extract_failed": False,
+            },
+            clean_user_input="\u963f\u65af\u8482\u82ac",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+
+        self.assertFalse(first_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(first_turn["next_similar_no_match_count"], 1)
+
+        second_turn = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": True, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": "\u8bf7\u60a8\u63d0\u4f9b\u8be6\u7ec6\u7684\u5730\u5740\u4fe1\u606f",
+                "is_extract_failed": False,
+            },
+            clean_user_input="\u963f\u65af\u8482\u82ac",
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+
+        self.assertTrue(second_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(second_turn["llm_result"]["reply"], "")
+        self.assertEqual(second_turn["next_last_unmatched_address"], "")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 0)
+
+    def test_llm_recorded_followup_survives_tentative_match_demotion(self) -> None:
+        main = _load_address_postprocess_main()
+        user_address = "\u798f\u5efa\u7701\u798f\u5dde\u5e02\u664b\u5b89\u533a\u5cb3\u5cf0\u95478\u53f7\u697c"
+        recorded_reply = (
+            "\u6211\u8bb0\u5f55\u7684\u5730\u5740\u4fe1\u606f\u662f\uff1a"
+            "\u798f\u5efa\u7701\u798f\u5dde\u5e02\u664b\u5b89\u533a\u5cb3\u5cf0\u95478\u53f7\u697c\uff0c"
+            "\u8bf7\u60a8\u518d\u8bf4\u4e00\u4e0b\u5177\u4f53\u7684\u5355\u5143\u53f7\u53ca\u95e8\u724c\u53f7\u3002"
+        )
+
+        input_llm_result = {
+            "matched_index": -1,
+            "match_count": 0,
+            "is_completed": False,
+            "reply": recorded_reply,
+            "is_extract_failed": False,
+        }
+        input_llm_result_snapshot = dict(input_llm_result)
+
+        result = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result=input_llm_result,
+            clean_user_input=user_address,
+            last_unmatched_address="\u798f\u5efa\u7701\u798f\u5dde\u5e02\u664b\u5b89\u533a\u5cb3\u5cf0\u9547",
+            similar_no_match_count=1,
+            address_list=[
+                "\u798f\u5efa\u7701\u798f\u5dde\u5e02\u664b\u5b89\u533a\u5cb3\u5cf0\u9547"
+                "\u4fdd\u5229\u9999\u69df\u56fd\u9645\u516b\u53f7\u697c2103",
+                "\u798f\u5efa\u7701\u798f\u5dde\u5e02\u9f13\u697c\u533a\u4e2d\u5c71\u8def"
+                "\u4fdd\u5229\u9999\u69df\u56fd\u9645\u516b\u53f7\u697c2101",
+            ],
+        )
+
+        self.assertEqual(result["llm_result"]["matched_index"], -1)
+        self.assertEqual(result["llm_result"]["match_count"], 0)
+        self.assertFalse(result["llm_result"]["is_extract_failed"])
+        self.assertEqual(result["llm_result"]["reply"], recorded_reply)
+        self.assertEqual(result["next_last_unmatched_address"], user_address)
+        self.assertEqual(input_llm_result, input_llm_result_snapshot)
+
+    def test_followup_fragment_uses_merged_user_scope_for_record_and_count(self) -> None:
+        main = _load_address_postprocess_main()
+        prev_address = "\u671d\u9633\u533a\u5efa\u56fd\u8def88\u53f7\u73b0\u4ee3\u57ce"
+        current_fragment = "5\u53f7\u697c"
+        merged_address = f"{prev_address}{current_fragment}"
+        recorded_reply = (
+            "\u6211\u8bb0\u5f55\u7684\u5730\u5740\u4fe1\u606f\u662f\uff1a"
+            f"{merged_address}\uff0c"
+            "\u8bf7\u60a8\u518d\u8bf4\u4e00\u4e0b\u5177\u4f53\u7684\u5355\u5143\u53f7\u53ca\u95e8\u724c\u53f7\u3002"
+        )
+
+        result = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "reply": recorded_reply,
+                "is_extract_failed": False,
+            },
+            clean_user_input=current_fragment,
+            last_unmatched_address=prev_address,
+            similar_no_match_count=0,
+            address_list=[
+                "\u5317\u4eac\u5e02\u671d\u9633\u533a\u5efa\u56fd\u8def88\u53f7\u73b0\u4ee3\u57ce5\u53f7\u697c1\u5355\u5143101\u5ba4",
+                "\u5317\u4eac\u5e02\u671d\u9633\u533a\u5efa\u56fd\u8def88\u53f7\u73b0\u4ee3\u57ce5\u53f7\u697c1\u5355\u5143105\u5ba4",
+            ],
+        )
+
+        self.assertEqual(result["llm_result"]["matched_index"], -1)
+        self.assertEqual(result["llm_result"]["match_count"], 0)
+        self.assertEqual(result["llm_result"]["reply"], recorded_reply)
+        self.assertEqual(result["next_last_unmatched_address"], merged_address)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
+
     def test_broad_region_without_overlap_clears_unmatched_context(self) -> None:
         postprocess_main = _load_address_postprocess_main()
         build_llm_message_main = _load_build_llm_message_main()
@@ -2680,6 +2885,61 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(output["reply"], "抱歉您提供的地址不正确。")
+
+    def test_candidate_overlap_resets_similar_no_match_count_between_wrong_inputs(self) -> None:
+        postprocess_main = _load_address_postprocess_main()
+        addresses = [
+            "\u798f\u5dde\u5e02\u5cb3\u5cf0\u9547\u4fdd\u5229\u9999\u69df\u56fd\u9645\u4e1c\u533a\u4e09\u53f7\u697c1201",
+            "\u798f\u5dde\u5e02\u5cb3\u5cf0\u9547\u4fdd\u5229\u9999\u69df\u56fd\u9645\u4e1c\u533a\u4e09\u53f7\u697c1200",
+        ]
+        llm_result = {
+            "matched_index": -1,
+            "match_count": 0,
+            "is_completed": False,
+            "reply": "\u597d\u7684\uff0c\u8bf7\u60a8\u518d\u8bf4\u4e00\u4e0b\u5177\u4f53\u7684\u5c0f\u533a\u6216\u6751\u9547\u540d\u79f0\u3002",
+            "is_extract_failed": False,
+        }
+
+        first_turn = postprocess_main(
+            llm_result=llm_result,
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="\u4fdd\u5229\u9999\u69df",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=addresses,
+        )
+        self.assertEqual(first_turn["next_last_unmatched_address"], "\u4fdd\u5229\u9999\u69df")
+        self.assertEqual(first_turn["next_similar_no_match_count"], 0)
+
+        second_turn = postprocess_main(
+            llm_result=llm_result,
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="\u5927\u5858\u6751",
+            last_unmatched_address=first_turn["next_last_unmatched_address"],
+            similar_no_match_count=first_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+        self.assertFalse(second_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(second_turn["next_last_unmatched_address"], "\u4fdd\u5229\u9999\u69df")
+        self.assertEqual(second_turn["next_similar_no_match_count"], 1)
+
+        third_turn = postprocess_main(
+            llm_result=llm_result,
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="\u4e09\u53f7\u697c",
+            last_unmatched_address=second_turn["next_last_unmatched_address"],
+            similar_no_match_count=second_turn["next_similar_no_match_count"],
+            address_list=addresses,
+        )
+        self.assertFalse(third_turn["llm_result"]["is_extract_failed"])
+        self.assertEqual(third_turn["next_last_unmatched_address"], "\u4fdd\u5229\u9999\u69df\u4e09\u53f7\u697c")
+        self.assertEqual(third_turn["next_similar_no_match_count"], 0)
 
     def test_two_different_broad_regions_without_overlap_trigger_extract_failed(self) -> None:
         postprocess_main = _load_address_postprocess_main()
@@ -3072,6 +3332,45 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(result["effective_match_input"], "世安新城方景小区")
+
+    def test_numeric_suffix_prefix_overlap_merges_without_duplication(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+
+        result = build_llm_message_main(
+            {
+                "userInput": "1201",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "A120",
+                "similar_no_match_count": 1,
+                "kdRecords": ["A1201", "A1200"],
+            }
+        )
+
+        self.assertEqual(result["effective_match_input"], "A1201")
+        self.assertIn("User: A1201", result["user_message"])
+        self.assertNotIn("A1201201", result["user_message"])
+
+    def test_address_context_suffix_prefix_overlap_merges_without_duplication(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+
+        result = build_llm_message_main(
+            {
+                "userInput": "1201",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "福州市岳峰镇保利香槟国际东区三号楼120",
+                "similar_no_match_count": 1,
+                "kdRecords": [
+                    "福州市岳峰镇保利香槟国际东区三号楼1201",
+                    "福州市岳峰镇保利香槟国际东区三号楼1200",
+                ],
+            }
+        )
+
+        self.assertEqual(result["effective_match_input"], "福州市岳峰镇保利香槟国际东区三号楼1201")
+        self.assertIn("User: 福州市岳峰镇保利香槟国际东区三号楼1201", result["user_message"])
+        self.assertNotIn("1201201", result["user_message"])
 
     def test_room_then_homophone_town_records_candidate_corrected_text(self) -> None:
         postprocess_main = _load_address_postprocess_main()
