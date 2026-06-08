@@ -93,6 +93,13 @@ def _load_build_llm_message_main():
     )
 
 
+def _load_build_llm_message_file_main():
+    source_path = Path(__file__).resolve().parents[1] / "构建llm消息.py"
+    namespace: dict[str, object] = {}
+    exec(source_path.read_text(encoding="utf-8-sig"), namespace)
+    return namespace["main"]
+
+
 def _load_workflow_state_main():
     return _load_code_main(
         lambda code: (
@@ -1505,6 +1512,71 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(result["next_last_unmatched_address"], "8号楼2102")
         self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_equivalent_building_markers_still_reject_unspoken_place(self) -> None:
+        main = _load_address_postprocess_main()
+        address_list = [
+            "\u79fb\u673a\u8d3950\u5143\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u5367\u864e\u5c71\u8def\u67cf\u7fe0\u82d11\u53f7\u697c5\u5355\u5143202\u5ba4",
+            "\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u5367\u864e\u5c71\u8def\u67cf\u7fe0\u82d14\u53f7\u697c2\u5355\u5143102\u5ba4",
+            "\u79fb\u673a\u8d3950\u5143\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u6c5f\u9633\u5546\u4e1a\u8857\u6c5f\u9633\u5316\u5de5\u5382100\u53f7\u697c1\u5355\u5143302\u5ba4",
+        ]
+
+        for clean_user_input in (
+            "\u4e00\u767e\u697c\u4e00\u5355\u5143\u4e09\u96f6\u4e8c",
+            "100\u680b1\u5355\u5143302\u5ba4",
+            "100\u53f71\u5355\u5143302\u5ba4",
+        ):
+            with self.subTest(clean_user_input=clean_user_input):
+                result = main(
+                    llm_result={
+                        "matched_index": 2,
+                        "match_count": 1,
+                        "is_completed": False,
+                        "reply": "",
+                        "is_extract_failed": False,
+                    },
+                    meaningless_result={"is_meaningless": False, "reply": ""},
+                    state="matching",
+                    matched_index=-1,
+                    clean_user_input=clean_user_input,
+                    last_unmatched_address="",
+                    similar_no_match_count=0,
+                    address_list=address_list,
+                )
+
+                self.assertEqual(result["llm_result"]["matched_index"], -1)
+                self.assertEqual(result["llm_result"]["match_count"], 0)
+                self.assertEqual(
+                    result["llm_result"]["reply"],
+                    f"我记录的地址信息是：{clean_user_input}，请您再说一下具体的小区或村镇名称。",
+                )
+                self.assertEqual(result["next_last_unmatched_address"], clean_user_input)
+                self.assertEqual(result["next_similar_no_match_count"], 0)
+
+    def test_llm_unique_match_still_rejects_different_building_number(self) -> None:
+        main = _load_address_postprocess_main()
+
+        result = main(
+            llm_result={
+                "matched_index": 0,
+                "match_count": 1,
+                "is_completed": False,
+                "reply": "",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="101\u697c1\u5355\u5143302\u5ba4",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=[
+                "\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u6c5f\u9633\u5316\u5de5\u5382100\u53f7\u697c1\u5355\u5143302\u5ba4",
+            ],
+        )
+
+        self.assertEqual(result["llm_result"]["matched_index"], -1)
+        self.assertEqual(result["llm_result"]["match_count"], 0)
 
     def test_building_without_room_requests_only_room_number(self) -> None:
         main = _load_address_postprocess_main()
@@ -3371,6 +3443,59 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(result["effective_match_input"], "福州市岳峰镇保利香槟国际东区三号楼1201")
         self.assertIn("User: 福州市岳峰镇保利香槟国际东区三号楼1201", result["user_message"])
         self.assertNotIn("1201201", result["user_message"])
+
+    def test_chinese_numeric_detail_preserved_on_first_candidate_overlap_cleaning(self) -> None:
+        payload = {
+            "userInput": "一百楼一单元三零二",
+            "state": "matching",
+            "matchedIndex": -1,
+            "last_unmatched_address": "",
+            "similar_no_match_count": 0,
+            "kdRecords": [
+                "移机费50元山西太原市尖草坪区卧虎山路柏翠苑1号楼5单元202室",
+                "山西太原市尖草坪区卧虎山路柏翠苑4号楼2单元102室",
+                "移机费50元山西太原市尖草坪区江阳商业街江阳化工厂100号楼1单元302室",
+            ],
+        }
+
+        for label, build_llm_message_main in (
+            ("workflow-json", _load_build_llm_message_main()),
+            ("source-file", _load_build_llm_message_file_main()),
+        ):
+            with self.subTest(label=label):
+                result = build_llm_message_main(payload)
+
+                self.assertEqual(result["clean_user_input"], "一百楼一单元三零二")
+                self.assertEqual(result["effective_match_input"], "一百楼一单元三零二")
+                self.assertIn("User: 一百楼一单元三零二", result["user_message"])
+                self.assertIn("user-spoken scope: 一百楼一单元三零二", result["user_message"])
+                self.assertNotIn("User: 楼一单元三零二", result["user_message"])
+                self.assertNotIn("user-spoken scope: 楼一单元三零二", result["user_message"])
+
+    def test_chinese_numeric_detail_preserved_when_candidate_backed_supplement_merges(self) -> None:
+        build_llm_message_main = _load_build_llm_message_main()
+
+        result = build_llm_message_main(
+            {
+                "userInput": "江阳化工厂",
+                "state": "matching",
+                "matchedIndex": -1,
+                "last_unmatched_address": "一百楼一单元三零二",
+                "similar_no_match_count": 1,
+                "kdRecords": [
+                    "移机费50元山西太原市尖草坪区卧虎山路柏翠苑1号楼5单元202室",
+                    "山西太原市尖草坪区卧虎山路柏翠苑4号楼2单元102室",
+                    "移机费50元山西太原市尖草坪区江阳商业街江阳化工厂100号楼1单元302室",
+                ],
+            }
+        )
+
+        expected = "一百楼一单元三零二江阳化工厂"
+        self.assertEqual(result["effective_match_input"], expected)
+        self.assertIn(f"User: {expected}", result["user_message"])
+        self.assertIn(f"user-spoken scope: {expected}", result["user_message"])
+        self.assertNotIn("一百楼1单元302", result["user_message"])
+        self.assertNotIn("一百楼1单元302", result["history_user_message"])
 
     def test_room_then_homophone_town_records_candidate_corrected_text(self) -> None:
         postprocess_main = _load_address_postprocess_main()

@@ -1,4 +1,4 @@
-﻿import re
+import re
 from difflib import SequenceMatcher
 
 try:
@@ -220,10 +220,15 @@ def main(
             return text
 
         digit_map = {
-            "零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
-            "五": 5, "六": 6, "七": 7, "八": 8, "九": 9
+            "\u96f6": 0, "\u3007": 0, "\u4e00": 1, "\u4e8c": 2, "\u4e24": 2, "\u4e09": 3, "\u56db": 4,
+            "\u4e94": 5, "\u516d": 6, "\u4e03": 7, "\u516b": 8, "\u4e5d": 9,
+            "Áã": 0, "Ò»": 1, "¶þ": 2, "Á½": 2, "Èý": 3, "ËÄ": 4,
+            "Îå": 5, "Áù": 6, "Æß": 7, "°Ë": 8, "¾Å": 9
         }
-        unit_map = {"十": 10, "百": 100, "千": 1000}
+        unit_map = {"\u5341": 10, "\u767e": 100, "\u5343": 1000, "Ê®": 10, "°Ù": 100, "Ç§": 1000}
+
+        if all(ch in digit_map for ch in text) and len(text) >= 2:
+            return "".join(str(digit_map[ch]) for ch in text)
 
         total = 0
         current = 0
@@ -823,6 +828,27 @@ def main(
     def _has_building_or_room(text: str) -> bool:
         return bool(_extract_building_name(text) or _extract_room_name(text) or _extract_unit_name(text))
 
+    def _has_full_building_unit_room_detail(text: str) -> bool:
+        text = _normalize_address_marker_tokens(_to_str(text))
+        if not text or not _extract_building_name(text):
+            return False
+
+        has_unit = bool(re.search(r"(?:\d+|[一二三四五六七八九十百零两]+)单元", text))
+        if not has_unit:
+            return False
+
+        text_without_building = re.sub(
+            r"(?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼|号(?=(?:\d+单元|\d{3,6}(?:室)?)))",
+            "",
+            text,
+            count=1
+        )
+        text_without_unit = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+)单元", "", text_without_building, count=1)
+        return bool(
+            _extract_room_name(text)
+            or re.search(r"(?:\d{3,6}|[一二三四五六七八九十百零两]{3,6})室?", text_without_unit)
+        )
+
     def _has_precise_detail_conflict(user_text: str, candidate_text: str) -> bool:
         user_text = _to_str(user_text)
         candidate_text = _to_str(candidate_text)
@@ -840,6 +866,9 @@ def main(
             if not user_value:
                 continue
             candidate_value = extractor(candidate_text)
+            if extractor is _extract_building_name:
+                user_value = _normalize_building_for_compare(user_value)
+                candidate_value = _normalize_building_for_compare(candidate_value)
             if candidate_value and candidate_value != user_value:
                 return True
 
@@ -926,22 +955,37 @@ def main(
         text = _normalize_address_marker_tokens(text)
         if not text:
             return ""
-        m = re.search(r"((?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼))", text)
+        m = re.search(r"((?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼|号(?=(?:\d+单元|\d{3,6}(?:室)?))))", text)
         if not m:
             return ""
         raw = m.group(1)
-        m2 = re.match(r"((?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*))(栋|幢|座|号楼|楼)", raw)
+        m2 = re.match(r"((?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*))(栋|幢|座|号楼|楼|号)", raw)
         if not m2:
             return raw
         return f"{_normalize_cn_digits(m2.group(1))}{m2.group(2)}"
+
+    def _normalize_building_for_compare(value: str) -> str:
+        value = _to_str(value)
+        if not value:
+            return ""
+
+        m = re.fullmatch(r"((?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*))(栋|幢|座|号楼|楼|号)", value)
+        if not m:
+            return value
+        return f"{_normalize_cn_digits(m.group(1))}楼"
 
     def _extract_unit_name(text: str) -> str:
         text = _to_str(text)
         text = _normalize_address_marker_tokens(text)
         if not text:
             return ""
-        m = re.search(r"(\d+单元)", text)
-        return m.group(1) if m else ""
+        m = re.search(r"((?:\d+|[一二三四五六七八九十百零两]+)单元)", text)
+        if not m:
+            return ""
+        m2 = re.match(r"((?:\d+|[一二三四五六七八九十百零两]+))单元", m.group(1))
+        if not m2:
+            return m.group(1)
+        return f"{_normalize_cn_digits(m2.group(1))}单元"
 
     def _extract_room_name(text: str) -> str:
         text = _to_str(text)
@@ -949,14 +993,35 @@ def main(
         if not text:
             return ""
 
-        m = re.search(r"(\d+室)", text)
+        m = re.search(r"((?:\d+|[一二三四五六七八九十百零两]{3,6})室)", text)
         if m:
-            return m.group(1)
+            raw = m.group(1)
+            m2 = re.match(r"((?:\d+|[一二三四五六七八九十百零两]{3,6}))室", raw)
+            if not m2:
+                return raw
+            return _normalize_cn_digits(m2.group(1))
 
         tmp = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼)", "", text)
-        tmp = re.sub(r"\d+单元", "", tmp)
-        nums = re.findall(r"(?<!\d)(\d{3,6})(?!\d)", tmp)
-        return nums[-1] if nums else ""
+        tmp = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+)单元", "", tmp)
+        nums = re.findall(r"(?<!\d)(\d{3,6})(?!\d)|([一二三四五六七八九十百零两]{3,6})", tmp)
+        values = [num or cn_num for num, cn_num in nums if num or cn_num]
+        return _normalize_cn_digits(values[-1]) if values else ""
+
+    def _detail_values_covered(prev_text: str, curr_text: str) -> bool:
+        prev_building = _normalize_building_for_compare(_extract_building_name(prev_text))
+        curr_building = _normalize_building_for_compare(_extract_building_name(curr_text))
+        if prev_building and prev_building != curr_building:
+            return False
+
+        for extractor in (_extract_unit_name, _extract_room_name, _extract_house_name):
+            prev_value = extractor(prev_text)
+            if not prev_value:
+                continue
+            curr_value = extractor(curr_text)
+            if curr_value != prev_value:
+                return False
+
+        return bool(prev_building or _extract_unit_name(prev_text) or _extract_room_name(prev_text) or _extract_house_name(prev_text))
 
     def _is_fragment_like(text: str) -> bool:
         t = _normalize_text(text)
@@ -1030,6 +1095,8 @@ def main(
         if curr_norm == prev_norm or curr_norm in prev_norm:
             return prev_text
         if prev_norm in curr_norm:
+            return curr_text
+        if _detail_values_covered(prev_text, curr_text):
             return curr_text
 
         max_overlap = min(len(prev_text), len(curr_text))
@@ -1522,11 +1589,12 @@ def main(
         text = _to_str(text)
         if not text:
             return ""
+        text = _normalize_address_marker_tokens(text)
 
-        fragment = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼)", "", text)
-        fragment = re.sub(r"\d+单元", "", fragment)
-        fragment = re.sub(r"\d+室", "", fragment)
-        fragment = re.sub(r"(?<!\d)\d{3,6}(?!\d)", "", fragment)
+        fragment = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼|号(?=(?:\d+单元|\d{3,6}(?:室)?)))", "", text)
+        fragment = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+)单元", "", fragment)
+        fragment = re.sub(r"(?:\d+|[一二三四五六七八九十百零两]+)室", "", fragment)
+        fragment = re.sub(r"(?<!\d)\d{3,6}(?!\d)|[一二三四五六七八九十百零两]{3,6}", "", fragment)
         fragment = re.sub(r"(\d+号院|\d+号(?!楼|栋|幢|单元|室)|\d+弄|\d+里)", "", fragment)
         return fragment.strip()
 
@@ -2422,7 +2490,6 @@ def main(
     model_is_completed = _to_bool(llm_result.get("is_completed", False))
     model_is_extract_failed = _to_bool(llm_result.get("is_extract_failed", llm_result.get("extract_failed", False)))
     model_reply = _to_str(llm_result.get("reply"))
-
     # Phase 1: calculate internal decisions only. The incoming llm_result is
     # not updated until the final assembly block at the end of the function.
     match_count = model_match_count
@@ -2531,6 +2598,7 @@ def main(
         current_state == "matching"
         and llm_matched_index >= 0
         and match_count == 1
+        and not _has_full_building_unit_room_detail(current_input)
         and (
             _should_reject_place_less_unique_match(current_input)
             or not _has_matchable_place_level(current_input)
@@ -2617,6 +2685,7 @@ def main(
             match_count = 1
             reply = ""
 
+    unspoken_specific_place_demoted = False
     if (
         current_state == "matching"
         and match_count == 1
@@ -2625,6 +2694,7 @@ def main(
         and not is_extract_failed
         and _candidate_has_unspoken_specific_place(current_input, address_list, llm_matched_index)
     ):
+        unspoken_specific_place_demoted = True
         llm_matched_index = -1
         match_count = 0
         reply = ""
@@ -2808,6 +2878,8 @@ def main(
         and not _is_extension_of_previous(current_raw_input, prev_unmatched)
     )
     should_reset_similar_count_for_candidate_overlap = bool(
+        unspoken_specific_place_demoted
+        or
         not repeated_previous_address
         and (
         (current_has_candidate_overlap and _has_count_reset_place_anchor(candidate_overlap_scope))

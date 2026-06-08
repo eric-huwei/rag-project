@@ -38,10 +38,10 @@ class LlmPostprocessFileTests(unittest.TestCase):
 
         self.assertEqual(
             result["llm_result"]["reply"],
-            "我记录的地址信息是：北京市大同区，请您再说一下具体的小区或村镇名称。",
+            "",
         )
-        self.assertEqual(result["next_last_unmatched_address"], "北京市大同区")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_preserves_recorded_reply_and_history_for_layer_followup(self) -> None:
         main = _load_llm_postprocess_main()
@@ -74,7 +74,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             "我记录的地址信息是：合肥市庐江县，请您再说一下具体的小区或村镇名称。",
         )
         self.assertEqual(result["next_last_unmatched_address"], "合肥市庐江县")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_full_precise_unmatched_address_requests_correct_complete_info(self) -> None:
         main = _load_llm_postprocess_main()
@@ -283,7 +283,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["match_count"], 0)
         self.assertEqual(result["llm_result"]["reply"], "请您提供正确完整的地址信息")
         self.assertEqual(result["next_last_unmatched_address"], "州市鼓楼区保利香槟国际8号楼2101")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_confirming_denial_uses_detail_request_not_forbidden_followup(self) -> None:
         main = _load_llm_postprocess_main()
@@ -436,7 +436,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             "我记录的地址信息是：保利香槟国际，请您再提供下楼栋号、单元号及门牌号信息",
         )
         self.assertEqual(result["next_last_unmatched_address"], "保利香槟国际")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_weak_area_recorded_reply_yields_to_stronger_named_place_fragment(self) -> None:
         main = _load_llm_postprocess_main()
@@ -466,7 +466,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             "我记录的地址信息是：保利香槟，请您再提供下楼栋号、单元号及门牌号信息",
         )
         self.assertEqual(result["next_last_unmatched_address"], "保利香槟")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_named_place_with_chinese_building_and_room_matches_uniquely(self) -> None:
         main = _load_llm_postprocess_main()
@@ -592,7 +592,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             "我记录的地址信息是：保利香槟，请您再提供下楼栋号、单元号及门牌号信息",
         )
         self.assertEqual(result["next_last_unmatched_address"], "保利香槟")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_premerged_named_place_input_does_not_duplicate_previous_building_room(self) -> None:
         main = _load_llm_postprocess_main()
@@ -654,7 +654,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             "我记录的地址信息是：中山路，请您再说一下具体的小区或村镇名称。",
         )
         self.assertEqual(result["next_last_unmatched_address"], "中山路")
-        self.assertEqual(result["next_similar_no_match_count"], 1)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_building_and_room_without_place_records_and_requests_place_name(self) -> None:
         main = _load_llm_postprocess_main()
@@ -717,6 +717,71 @@ class LlmPostprocessFileTests(unittest.TestCase):
         )
         self.assertEqual(result["next_last_unmatched_address"], "8号楼2102")
         self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_equivalent_building_markers_still_reject_unspoken_place(self) -> None:
+        main = _load_llm_postprocess_main()
+        address_list = [
+            "\u79fb\u673a\u8d3950\u5143\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u5367\u864e\u5c71\u8def\u67cf\u7fe0\u82d11\u53f7\u697c5\u5355\u5143202\u5ba4",
+            "\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u5367\u864e\u5c71\u8def\u67cf\u7fe0\u82d14\u53f7\u697c2\u5355\u5143102\u5ba4",
+            "\u79fb\u673a\u8d3950\u5143\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u6c5f\u9633\u5546\u4e1a\u8857\u6c5f\u9633\u5316\u5de5\u5382100\u53f7\u697c1\u5355\u5143302\u5ba4",
+        ]
+
+        for clean_user_input in (
+            "\u4e00\u767e\u697c\u4e00\u5355\u5143\u4e09\u96f6\u4e8c",
+            "100\u680b1\u5355\u5143302\u5ba4",
+            "100\u53f71\u5355\u5143302\u5ba4",
+        ):
+            with self.subTest(clean_user_input=clean_user_input):
+                result = main(
+                    matched_index=-1,
+                    state="matching",
+                    meaningless_result={"is_meaningless": False, "reply": ""},
+                    llm_result={
+                        "matched_index": 2,
+                        "match_count": 1,
+                        "is_completed": False,
+                        "reply": "",
+                        "is_extract_failed": False,
+                    },
+                    clean_user_input=clean_user_input,
+                    last_unmatched_address="",
+                    similar_no_match_count=0,
+                    address_list=address_list,
+                )
+
+                self.assertEqual(result["llm_result"]["matched_index"], -1)
+                self.assertEqual(result["llm_result"]["match_count"], 0)
+                self.assertEqual(
+                    result["llm_result"]["reply"],
+                    f"我记录的地址信息是：{clean_user_input}，请您再说一下具体的小区或村镇名称。",
+                )
+                self.assertEqual(result["next_last_unmatched_address"], clean_user_input)
+                self.assertEqual(result["next_similar_no_match_count"], 0)
+
+    def test_llm_unique_match_still_rejects_different_building_number(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": 0,
+                "match_count": 1,
+                "is_completed": False,
+                "reply": "",
+                "is_extract_failed": False,
+            },
+            clean_user_input="101\u697c1\u5355\u5143302\u5ba4",
+            last_unmatched_address="",
+            similar_no_match_count=0,
+            address_list=[
+                "\u5c71\u897f\u592a\u539f\u5e02\u5c16\u8349\u576a\u533a\u6c5f\u9633\u5316\u5de5\u5382100\u53f7\u697c1\u5355\u5143302\u5ba4",
+            ],
+        )
+
+        self.assertEqual(result["llm_result"]["matched_index"], -1)
+        self.assertEqual(result["llm_result"]["match_count"], 0)
 
     def test_room_followup_after_building_keeps_recorded_address(self) -> None:
         main = _load_llm_postprocess_main()
@@ -959,7 +1024,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             self.assertEqual(result["llm_result"]["match_count"], 0)
             self.assertEqual(result["llm_result"]["reply"], expected_reply)
             self.assertEqual(result["next_last_unmatched_address"], expected_last_unmatched)
-            self.assertEqual(result["next_similar_no_match_count"], 1)
+            self.assertEqual(result["next_similar_no_match_count"], 0)
 
             last_unmatched = result["next_last_unmatched_address"]
             similar_count = result["next_similar_no_match_count"]

@@ -57,6 +57,7 @@ def main(args: dict) -> dict:
     def normalize_text(text):
         text = str(text or "").strip()
         text = normalize_address_marker_tokens(text)
+        text = normalize_address_number_compare_tokens(text)
         text = re.sub(r"\[拼音:.*?\]", "", text)
         text = text.replace("#", "号")
         text = re.sub(r"[^\u4e00-\u9fa5A-Za-z0-9]", "", text)
@@ -97,9 +98,67 @@ def main(args: dict) -> dict:
 
 
     _CN_CHAR_DIGIT_KEYS = {
-        "\u96f6": "0", "\u4e00": "1", "\u4e8c": "2", "\u4e24": "2", "\u4e09": "3", "\u56db": "4",
+        "\u96f6": "0", "〇": "0", "\u4e00": "1", "\u4e8c": "2", "\u4e24": "2", "\u4e09": "3", "\u56db": "4",
         "\u4e94": "5", "\u516d": "6", "\u4e03": "7", "\u516b": "8", "\u4e5d": "9"
     }
+
+    _CN_NUMBER_DIGITS = {
+        "零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+        "五": 5, "六": 6, "七": 7, "八": 8, "九": 9
+    }
+    _CN_NUMBER_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
+    _CN_ADDRESS_NUMBER_CHARS = "一二两三四五六七八九十百千万零〇"
+
+    def _cn_number_to_arabic(text):
+        text = str(text or "").strip()
+        if not text:
+            return ""
+
+        if re.fullmatch(r"[零〇一二两三四五六七八九]+", text):
+            return "".join(str(_CN_NUMBER_DIGITS[ch]) for ch in text)
+
+        total = 0
+        section = 0
+        number = 0
+        for ch in text:
+            if ch in _CN_NUMBER_DIGITS:
+                number = _CN_NUMBER_DIGITS[ch]
+                continue
+            unit = _CN_NUMBER_UNITS.get(ch)
+            if not unit:
+                return text
+            if unit == 10000:
+                section = (section + number) * unit
+                total += section
+                section = 0
+            else:
+                section += (number or 1) * unit
+            number = 0
+
+        return str(total + section + number)
+
+    def normalize_address_number_compare_tokens(text):
+        text = str(text or "").strip()
+        if not text:
+            return ""
+
+        cn_num = f"[{_CN_ADDRESS_NUMBER_CHARS}]+"
+        if re.fullmatch(cn_num, text):
+            return _cn_number_to_arabic(text)
+
+        # 只用于比较归一化，不能用这个结果替换用户原话。
+        text = re.sub(
+            fr"({cn_num})(?=号楼|楼|栋|幢|座|单元|室)",
+            lambda m: _cn_number_to_arabic(m.group(1)),
+            text
+        )
+        text = re.sub(
+            fr"(?<=单元)({cn_num})(?=室|$|[^\u4e00-\u9fa5A-Za-z0-9])",
+            lambda m: _cn_number_to_arabic(m.group(1)),
+            text
+        )
+        text = text.replace("号楼", "楼")
+        return text
 
     def pinyin_variants(py):
         py = str(py or "").lower().replace("\u00fc", "v").replace("u:", "v")
@@ -577,7 +636,16 @@ def main(args: dict) -> dict:
             extracted = extractor(value)
             if extracted and normalize_text(extracted) == value_norm:
                 return True
-        return False
+        value = normalize_address_marker_tokens(str(value or "").strip())
+        cn_num = r"[一二两三四五六七八九十百千万零〇]+"
+        num = fr"(?:\d+|{cn_num}|[A-Za-z]\d*)"
+        stripped = value
+        stripped = re.sub(fr"{num}(?:栋|幢|座|号楼|楼)", "", stripped)
+        stripped = re.sub(fr"(?:\d+|{cn_num})单元", "", stripped)
+        stripped = re.sub(fr"(?:\d+|{cn_num})室", "", stripped)
+        stripped = re.sub(r"\d+号院|\d+号(?!楼|栋|幢|单元|室)|\d+弄|\d+里", "", stripped)
+        stripped = re.sub(fr"(?<![A-Za-z0-9一二两三四五六七八九十百千万零〇])(?:\d{{3,6}}|{cn_num})(?![A-Za-z0-9一二两三四五六七八九十百千万零〇])", "", stripped)
+        return value != stripped and not normalize_text(stripped)
 
     def _extract_candidate_backed_terms(text):
         text = normalize_address_marker_tokens(str(text or "").strip())
@@ -912,6 +980,8 @@ def main(args: dict) -> dict:
         semantic_hints.append("用户输入中的“数字#”表示楼栋/栋座标记，例如“10#101”应理解为“10号楼101”，不要匹配成“10号门”。")
     if re.search(r"\d+\s*号\s*门", user_input):
         semantic_hints.append("用户输入中的“数字号门”表示门或入口位置，不表示楼栋号，不能与“数字#”“数字号楼”“数字栋”互认。")
+    if re.search(r"[一二两三四五六七八九十百千万零〇]+(?:楼|号楼|栋|幢|座|单元|室)|单元[一二两三四五六七八九十百千万零〇]{2,6}", user_input):
+        semantic_hints.append("用户输入中的中文数字地址编号必须保留原片段，并按分段等价参与匹配：例如“一百楼一单元三零二”中“一百”可匹配候选的“100”，“一”可匹配“1”，“三零二”可匹配“302”；禁止把“一百”裁掉只剩“楼”，也不能仅凭该规则补入用户未说出的地点层级。")
     if semantic_hints:
         context_text += f"\n[System Hint] {' '.join(semantic_hints)}"
 
