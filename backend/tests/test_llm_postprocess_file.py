@@ -342,7 +342,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
             "好的，请您再说一下具体的小区或村镇名称。",
         )
 
-    def test_recorded_reply_does_not_append_candidate_suffix(self) -> None:
+    def test_model_reply_is_ignored_while_postprocess_builds_detail_followup(self) -> None:
         main = _load_llm_postprocess_main()
 
         result = main(
@@ -370,10 +370,44 @@ class LlmPostprocessFileTests(unittest.TestCase):
 
         self.assertEqual(
             result["llm_result"]["reply"],
-            "我记录的地址信息是：福州市岳峰镇保利香槟，请您再说一下具体的单元号及门牌号。",
+            "我记录的地址信息是：福州市岳峰镇保利香槟，请您再说一下具体的楼栋号、单元号及门牌号。",
         )
         self.assertEqual(result["next_last_unmatched_address"], "福州市岳峰镇保利香槟")
         self.assertNotIn("国际东区三号楼", result["llm_result"]["reply"])
+
+    def test_model_fragment_drives_followup_without_model_reply(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "matched_address_fragment": "福州市岳峰镇保利香槟",
+            },
+            clean_user_input="保利香槟",
+            last_unmatched_address="福州市岳峰镇",
+            similar_no_match_count=1,
+            address_list=[
+                "福州市岳峰镇保利香槟国际东区三号楼1201",
+                "福州市岳峰镇保利香槟国际东区三号楼1200",
+            ],
+        )
+
+        self.assertNotIn("reply", {
+            "matched_index": -1,
+            "match_count": 0,
+            "is_completed": False,
+            "matched_address_fragment": "福州市岳峰镇保利香槟",
+        })
+        self.assertEqual(result["next_last_unmatched_address"], "福州市岳峰镇保利香槟")
+        self.assertEqual(
+            result["llm_result"]["matched_address_fragment"],
+            "福州市岳峰镇保利香槟",
+        )
 
     def test_recorded_reply_does_not_prepend_candidate_prefix(self) -> None:
         main = _load_llm_postprocess_main()
@@ -528,7 +562,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["reply"], "")
         self.assertEqual(
             result["next_last_unmatched_address"],
-            "__NO_MERGE__:三号楼1201保利香槟",
+            "__NO_MERGE__:保利香槟三号楼1201",
         )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 
@@ -875,7 +909,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["reply"], "")
         self.assertEqual(
             result["next_last_unmatched_address"],
-            "__NO_MERGE__:8号楼2102中山路",
+            "__NO_MERGE__:中山路8号楼2102",
         )
         self.assertEqual(result["next_similar_no_match_count"], 0)
 

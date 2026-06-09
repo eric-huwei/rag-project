@@ -22,19 +22,20 @@
 - 始终输出 matched_address_fragment 字段。
 - 当 match_count=1 且 matched_index>=0 时，matched_address_fragment 必须是“被模型匹配到的候选地址片段”，也就是从 matched_index 对应候选地址中截取的、与用户本轮输入及 last_unmatched_address 合并输入对应的片段。该字段使用候选地址的标准原文写法，可把用户口述编号/同义楼栋标记映射成候选中的写法，例如用户说“一百楼一单元三零二”，候选为“...江阳化工厂100号楼1单元302室”，则 matched_address_fragment="100号楼1单元302室"。
 - 如果本轮是补充上一轮地址片段，matched_address_fragment 必须包含上一轮已匹配片段和本轮补充片段在候选地址中的合并结果。例如上一轮“一百楼一单元三零二”已对应候选片段“100号楼1单元302室”，本轮用户补充“江阳化工厂”，候选为“...江阳化工厂100号楼1单元302室”，则 matched_address_fragment="江阳化工厂100号楼1单元302室"。
-- 当未唯一匹配但已经提取到地址片段时，matched_address_fragment 仍必须填写当前已提取/已记录的地址片段；只有完全没有地址信息或确认完成时，matched_address_fragment=""。
+- 上一轮结果优先取 Context 中的 last_matched_address_fragment；没有该字段时取 Context 中的 last_unmatched_address；再没有则取最近历史中上一次 JSON 输出的 matched_address_fragment；如果没有 JSON，则取最近 AI 话术“我记录的地址信息是：...”中的地址片段；如果都没有则为空。
+- 如果本轮输入无法匹配任何候选、明显不是地址信息，或只是重复/改写上一轮已经匹配过的字段且没有新增有效地址层级，matched_address_fragment 不得填写本轮输入，必须返回上一轮结果；上一轮结果为空时返回 ""。
 
 5. 多条匹配：如果用户信息可匹配多条候选，输出 matched_index=-1，match_count=候选数量，is_completed=false。不要生成追问文本；后处理会根据候选差异和已说层级生成追问。
 - 同小区不同楼、同楼不同单元、同单元不同门牌、同村/乡镇不同街道或门牌、仅房间不同等细分追问，都交给后处理。
-- matched_address_fragment 填写当前已提取/已记录的用户地址片段；如果没有地址片段则填 ""。
+- matched_address_fragment 填写当前已匹配/已记录的地址片段；如果本轮没有新增有效地址片段，则返回上一轮结果；上一轮结果为空时返回 ""。
 
-6. 层级缺失：只到市/区县，或只有泛化区域，没有小区/村镇/街道/路名时，输出 matched_index=-1，match_count=0，is_completed=false，并且 matched_address_fragment 必须填写用户已说出的市/区县/泛化区域片段。
+6. 层级缺失：只到市/区县，或只有泛化区域，没有小区/村镇/街道/路名时，输出 matched_index=-1，match_count=0，is_completed=false。如果这是本轮新增的有效地址片段，matched_address_fragment 填写用户已说出的市/区县/泛化区域片段；如果不是新增有效地址片段，则返回上一轮结果；上一轮结果为空时返回 ""。
 - 如果用户已经说出小区/村镇或楼栋，则不属于本条。
 - 不要生成追问文本；后处理会决定是否追问具体小区、村镇、街道或路名。
 
-7. 完全没有地址信息时，输出 matched_index=-1，match_count=0，is_completed=false，matched_address_fragment=""。
+7. 完全没有地址信息时，输出 matched_index=-1，match_count=0，is_completed=false，matched_address_fragment=上一轮结果；上一轮结果为空时 matched_address_fragment=""。
 
-8. 已提取到有效地址信息但无匹配时，输出 matched_index=-1，match_count=0，is_completed=false，matched_address_fragment=当前已提取/已记录的地址片段。
+8. 已提取到有效地址信息但无匹配时，如果本轮信息是新增地址片段，matched_address_fragment=当前已提取/已记录的地址片段；如果本轮信息无法匹配候选、明显无效，或只是重复/改写上一轮已经匹配过的字段，则 matched_address_fragment=上一轮结果；上一轮结果为空时 matched_address_fragment=""。
 
 9. 当 state=matching 且 matched_index=-1 时：
 - 只判断匹配数量、匹配索引、完成状态和 matched_address_fragment。

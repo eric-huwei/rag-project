@@ -560,7 +560,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
 
         self.assertEqual(
             result["llm_result"]["reply"],
-            "我记录的地址信息是：福州市岳峰镇保利香槟国际，请您再说一下具体的小区或村镇名称。",
+            "我记录的地址信息是：福州市岳峰镇保利香槟国际，请您再说一下具体的楼栋号、单元号及门牌号。",
         )
         self.assertEqual(result["next_last_unmatched_address"], "福州市岳峰镇保利香槟国际")
 
@@ -2600,7 +2600,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(result["next_last_unmatched_address"], user_address)
 
-    def test_llm_recorded_followup_is_preserved_when_no_candidate_matches(self) -> None:
+    def test_model_reply_is_ignored_when_fragment_conflicts_with_candidates(self) -> None:
         main = _load_address_postprocess_main()
         user_address = "\u6c64\u6c60\u9547\u767e\u82b1\u5c0f\u533a9\u680b1109"
         recorded_reply = (
@@ -2620,6 +2620,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
                 "is_completed": False,
                 "reply": recorded_reply,
                 "is_extract_failed": False,
+                "matched_address_fragment": user_address,
             },
             clean_user_input=user_address,
             last_unmatched_address="\u6c64\u6c60\u9547",
@@ -2634,7 +2635,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result["llm_result"]["matched_index"], -1)
         self.assertEqual(result["llm_result"]["match_count"], 0)
-        self.assertEqual(result["llm_result"]["reply"], recorded_reply)
+        self.assertEqual(result["llm_result"]["reply"], "\u8bf7\u60a8\u63d0\u4f9b\u6b63\u786e\u5b8c\u6574\u7684\u5730\u5740\u4fe1\u606f")
         self.assertEqual(result["next_last_unmatched_address"], user_address)
 
     def test_repeating_recorded_no_match_address_triggers_extract_failed(self) -> None:
@@ -2769,7 +2770,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(second_turn["next_last_unmatched_address"], "")
         self.assertEqual(second_turn["next_similar_no_match_count"], 0)
 
-    def test_llm_recorded_followup_survives_tentative_match_demotion(self) -> None:
+    def test_model_reply_is_ignored_after_tentative_match_demotion(self) -> None:
         main = _load_address_postprocess_main()
         user_address = "\u798f\u5efa\u7701\u798f\u5dde\u5e02\u664b\u5b89\u533a\u5cb3\u5cf0\u95478\u53f7\u697c"
         recorded_reply = (
@@ -2784,6 +2785,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             "is_completed": False,
             "reply": recorded_reply,
             "is_extract_failed": False,
+            "matched_address_fragment": user_address,
         }
         input_llm_result_snapshot = dict(input_llm_result)
 
@@ -2806,7 +2808,12 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_index"], -1)
         self.assertEqual(result["llm_result"]["match_count"], 0)
         self.assertFalse(result["llm_result"]["is_extract_failed"])
-        self.assertEqual(result["llm_result"]["reply"], recorded_reply)
+        self.assertEqual(
+            result["llm_result"]["reply"],
+            "\u6211\u8bb0\u5f55\u7684\u5730\u5740\u4fe1\u606f\u662f\uff1a"
+            f"{user_address}\uff0c"
+            "\u8bf7\u60a8\u518d\u8bf4\u4e00\u4e0b\u5177\u4f53\u7684\u5c0f\u533a\u6216\u6751\u9547\u540d\u79f0\u3002",
+        )
         self.assertEqual(result["next_last_unmatched_address"], user_address)
         self.assertEqual(input_llm_result, input_llm_result_snapshot)
 
@@ -3295,6 +3302,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
                 "is_completed": False,
                 "reply": "请您提供详细的地址信息",
                 "is_extract_failed": False,
+                "matched_address_fragment": "云霄县",
             },
             meaningless_result={"is_meaningless": False, "reply": ""},
             state="matching",
@@ -3529,6 +3537,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
                 "is_completed": False,
                 "reply": "请您提供详细的地址信息",
                 "is_extract_failed": False,
+                "matched_address_fragment": "1202莆美镇",
             },
             meaningless_result={"is_meaningless": False, "reply": ""},
             state="matching",
