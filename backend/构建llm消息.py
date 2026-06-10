@@ -12,6 +12,7 @@ def main(args: dict) -> dict:
     state = (args.get("state") or "matching").strip()
     matched_index = args.get("matchedIndex", -1)
     last_unmatched_address_raw = (args.get("last_unmatched_address") or "").strip()
+    last_unmatched_fragment_raw = (args.get("last_unmatched_fragment") or "").strip()
 
     try:
         similar_no_match_count = int(args.get("similar_no_match_count") or 0)
@@ -448,6 +449,15 @@ def main(args: dict) -> dict:
     def _has_candidate_overlap_span_signal(text):
         return _has_strong_address_structure(text) or _has_place_like_signal(text) or has_named_place_anchor(text)
 
+    def is_room_number_fragment(text):
+        text = normalize_address_marker_tokens(str(text or "").strip())
+        if not text:
+            return False
+        if text.endswith("室"):
+            text = text[:-1]
+        number_text = normalize_address_number_compare_tokens(text)
+        return bool(re.fullmatch(r"\d{3,6}", number_text))
+
     def _phonetic_substring_match(fragment, candidate):
         fragment_norm = normalize_text(fragment)
         candidate_norm = normalize_text(candidate)
@@ -480,7 +490,7 @@ def main(args: dict) -> dict:
                     span_norm = normalize_text(span)
                     if len(span_norm) < 2:
                         continue
-                    has_signal = _has_candidate_overlap_span_signal(span)
+                    has_signal = _has_candidate_overlap_span_signal(span) or is_room_number_fragment(span)
                     if len(span_norm) < 4 and not has_signal:
                         continue
                     if span_norm in candidate_norm or _phonetic_substring_match(span, candidate):
@@ -519,6 +529,47 @@ def main(args: dict) -> dict:
 
         return best_span.strip()
 
+    def _candidate_supported_user_fragment(user_text, candidates):
+        user_text = normalize_address_marker_tokens(str(user_text or "").strip())
+        if not user_text or not isinstance(candidates, list) or not candidates:
+            return ""
+
+        raw_len = len(user_text)
+        best = None
+        for candidate in candidates:
+            candidate = normalize_address_marker_tokens(str(candidate or "").strip())
+            candidate_norm = normalize_text(candidate)
+            if not candidate_norm:
+                continue
+
+            for start in range(raw_len):
+                for end in range(start + 2, raw_len + 1):
+                    span = user_text[start:end]
+                    span_norm = normalize_text(span)
+                    if len(span_norm) < 2:
+                        continue
+                    supported = span_norm in candidate_norm or _phonetic_substring_match(span, candidate)
+                    if not supported:
+                        continue
+
+                    has_signal = _has_candidate_overlap_span_signal(span) or is_room_number_fragment(span) or has_named_place_anchor(span)
+                    if len(span_norm) < 4 and not has_signal:
+                        continue
+
+                    unsupported_prefix_norm = normalize_text(user_text[:start])
+                    unsupported_suffix_norm = normalize_text(user_text[end:])
+                    score = (
+                        len(span_norm) * 100
+                        + (30 if has_signal else 0)
+                        - len(unsupported_prefix_norm) * 3
+                        - len(unsupported_suffix_norm) * 2
+                    )
+                    item = (score, len(span_norm), start, end, span)
+                    if best is None or item > best:
+                        best = item
+
+        return best[4].strip() if best else ""
+
     def extract_by_address_structure(raw_text):
         compact_raw = re.sub(r"\s+", "", str(raw_text or "").strip())
         if not compact_raw:
@@ -531,20 +582,43 @@ def main(args: dict) -> dict:
                 return suffix.strip()
         return compact_raw if _has_strong_address_structure(compact_raw) else ""
 
+    def expand_candidate_span_to_user_address_window(raw_text, candidate_span):
+        compact_raw = re.sub(r"\s+", "", str(raw_text or "").strip())
+        candidate_span = re.sub(r"\s+", "", str(candidate_span or "").strip())
+        if not compact_raw or not candidate_span:
+            return candidate_span
+
+        start = compact_raw.find(candidate_span)
+        if start < 0:
+            return candidate_span
+
+        suffix = compact_raw[start:]
+        structured_span = extract_by_address_structure(suffix)
+        if (
+            structured_span
+            and normalize_text(candidate_span)
+            and normalize_text(candidate_span) in normalize_text(structured_span)
+        ):
+            return structured_span
+
+        return candidate_span
+
     def extract_spoken_address(raw_text, candidates):
         compact_raw = re.sub(r"\s+", "", str(raw_text or "").strip())
         if not compact_raw:
             return ""
 
-        candidate_span = extract_by_candidate_overlap(compact_raw, candidates)
-        if candidate_span:
-            return candidate_span
+        cleaned_raw = extract_effective_input(compact_raw)
 
-        structured_span = extract_by_address_structure(compact_raw)
+        structured_span = extract_by_address_structure(cleaned_raw)
         if structured_span:
             return structured_span
 
-        return extract_effective_input(compact_raw)
+        candidate_span = extract_by_candidate_overlap(cleaned_raw, candidates)
+        if candidate_span:
+            return expand_candidate_span_to_user_address_window(cleaned_raw, candidate_span)
+
+        return cleaned_raw
 
 
 
@@ -590,6 +664,32 @@ def main(args: dict) -> dict:
         text = normalize_address_marker_tokens(str(text or "").strip())
         match = re.search(r"(\d+\u53f7\u9662|\d+\u53f7(?!\u697c|\u680b|\u5e62|\u5355\u5143|\u5ba4)|\d+\u5f04|\d+\u91cc)", text)
         return match.group(1) if match else ""
+
+    def _normalized_detail_value(value):
+        return normalize_text(value)
+
+    def _has_precise_detail_conflict(user_text, candidate_text):
+        for extractor in (_extract_building_name, _extract_unit_name, _extract_room_name, _extract_house_name):
+            user_value = extractor(user_text)
+            candidate_value = extractor(candidate_text)
+            if (
+                user_value
+                and candidate_value
+                and _normalized_detail_value(user_value) != _normalized_detail_value(candidate_value)
+            ):
+                return True
+        return False
+
+    def _unique_candidate_detail_values(candidates, extractor):
+        values = []
+        seen = set()
+        for candidate in candidates:
+            value = extractor(candidate)
+            norm = _normalized_detail_value(value)
+            if norm and norm not in seen:
+                seen.add(norm)
+                values.append(value)
+        return values
 
     def _find_phonetic_span_match(fragment, candidate):
         fragment_norm = normalize_text(fragment)
@@ -784,6 +884,81 @@ def main(args: dict) -> dict:
                 unique_results.append(result)
         return unique_results[0] if len(unique_results) == 1 else ""
 
+    def _candidate_supports_user_scope(user_scope, candidate):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        candidate = normalize_address_marker_tokens(str(candidate or "").strip())
+        if not user_scope or not candidate:
+            return False
+        if _has_precise_detail_conflict(user_scope, candidate):
+            return False
+
+        terms = _extract_candidate_backed_terms(user_scope)
+        if not terms:
+            return has_address_overlap(user_scope, candidate)
+
+        candidate_norm = normalize_text(candidate)
+        for value, norm in terms:
+            if not norm:
+                continue
+            if norm in candidate_norm:
+                continue
+            if _find_phonetic_span(value, candidate):
+                continue
+            return False
+        return True
+
+    def _build_ambiguous_candidate_hint(user_scope, candidates):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        if not user_scope or not isinstance(candidates, list) or len(candidates) < 2:
+            return ""
+
+        matched_candidates = [
+            str(candidate)
+            for candidate in candidates
+            if _candidate_supports_user_scope(user_scope, candidate)
+        ]
+        if len(matched_candidates) < 2:
+            return ""
+
+        user_building = _extract_building_name(user_scope)
+        user_unit = _extract_unit_name(user_scope)
+        user_room = _extract_room_name(user_scope)
+        user_house = _extract_house_name(user_scope)
+
+        missing_parts = []
+        differing_values = []
+        candidate_buildings = _unique_candidate_detail_values(matched_candidates, _extract_building_name)
+        candidate_units = _unique_candidate_detail_values(matched_candidates, _extract_unit_name)
+        candidate_rooms = _unique_candidate_detail_values(matched_candidates, _extract_room_name)
+        candidate_houses = _unique_candidate_detail_values(matched_candidates, _extract_house_name)
+
+        if not user_building and len(candidate_buildings) > 1:
+            missing_parts.append("楼栋号")
+            differing_values.extend(candidate_buildings)
+        if not user_unit and len(candidate_units) > 1:
+            missing_parts.append("单元号")
+            differing_values.extend(candidate_units)
+        if not user_room and len(candidate_rooms) > 1:
+            missing_parts.append("门牌号/房间号")
+            differing_values.extend(candidate_rooms)
+        if not user_house and len(candidate_houses) > 1:
+            missing_parts.append("门牌号")
+            differing_values.extend(candidate_houses)
+
+        if not missing_parts:
+            return ""
+
+        differing_text = "、".join(str(value) for value in differing_values if value)
+        missing_text = "、".join(dict.fromkeys(missing_parts))
+        detail_text = f"（候选差异值：{differing_text}）" if differing_text else ""
+        return (
+            f"当前用户已说范围“{user_scope}”仍匹配 {len(matched_candidates)} 条候选，"
+            f"候选仍存在用户未提供的{missing_text}差异{detail_text}；"
+            f"禁止补入任一候选中用户未说出的楼栋、单元、门牌或房间号，禁止输出 match_count=1。"
+            f"本轮必须输出 matched_index=-1, match_count={len(matched_candidates)}, is_completed=false；"
+            f"matched_address_fragment 只能包含用户已说范围对应的候选支持片段，不能包含未说出的差异字段。"
+        )
+
     def merge_with_previous_address(prev_text, curr_text):
         prev_text = str(prev_text or "").strip()
         curr_text = str(curr_text or "").strip()
@@ -838,6 +1013,8 @@ def main(args: dict) -> dict:
     raw_clean_input = clean_prefix(user_input)
     clean_input = extract_spoken_address(user_input, kd_records)
     last_unmatched_address = strip_non_merge_history(last_unmatched_address_raw)
+    last_unmatched_fragment = strip_non_merge_history(last_unmatched_fragment_raw)
+    llm_last_unmatched_address = last_unmatched_fragment or last_unmatched_address
     can_merge_with_previous = bool(last_unmatched_address) and not is_non_merge_history(last_unmatched_address_raw)
 
     effective_match_input = merge_with_previous_address(last_unmatched_address if can_merge_with_previous else "", clean_input)
@@ -867,10 +1044,12 @@ def main(args: dict) -> dict:
     if matched_index_int >= 0 and prompt_state != "matching":
         context_parts.append(f"matched_index={matched_index_int}")
 
-    if can_merge_with_previous:
-        context_parts.append(f"last_unmatched_address={last_unmatched_address}")
+    if llm_last_unmatched_address:
+        context_parts.append(f"last_unmatched_address={llm_last_unmatched_address}")
+        if last_unmatched_fragment:
+            context_parts.append(f"last_matched_address_fragment={last_unmatched_fragment}")
         if has_pinyin:
-            prev_pys = pypinyin.pinyin(last_unmatched_address, heteronym=False, style=pypinyin.NORMAL)
+            prev_pys = pypinyin.pinyin(llm_last_unmatched_address, heteronym=False, style=pypinyin.NORMAL)
             prev_py_str = " ".join([p[0] for p in prev_pys]) if prev_pys else ""
             if prev_py_str:
                 context_parts.append(f"last_unmatched_pinyin={prev_py_str}")
@@ -932,6 +1111,29 @@ def main(args: dict) -> dict:
             "A correction may only replace an already-spoken span with similar-length same-scope text."
         )
 
+    candidate_supported_fragment = _candidate_supported_user_fragment(
+        display_scope,
+        [clean_rec for _record_str, clean_rec in raw_clean_recs],
+    )
+    if (
+        candidate_supported_fragment
+        and display_scope
+        and normalize_text(candidate_supported_fragment) != normalize_text(display_scope)
+    ):
+        context_text += (
+            f"\n[System Hint] 用户输入“{display_scope}”中，候选支持的地址片段是“{candidate_supported_fragment}”；"
+            "候选不支持的前缀、后缀或口语噪声不能写入 matched_address_fragment，"
+            "也不能因为整句不完全被候选支持就直接判定无匹配。"
+            f"若该支持片段能唯一命中候选，matched_address_fragment 应输出候选原文中的对应片段“{candidate_supported_fragment}”。"
+        )
+
+    ambiguity_hint = _build_ambiguous_candidate_hint(
+        display_scope,
+        [clean_rec for _record_str, clean_rec in raw_clean_recs],
+    )
+    if ambiguity_hint:
+        context_text += f"\n[System Hint] {ambiguity_hint}"
+
     if is_address_correction:
         context_text += f"\n[System Hint] 用户正在纠正上一条地址，本轮有效地址片段更可能是: {clean_input}。如当前状态不是matching，请按新的匹配请求处理。"
 
@@ -981,7 +1183,7 @@ def main(args: dict) -> dict:
     if re.search(r"\d+\s*号\s*门", user_input):
         semantic_hints.append("用户输入中的“数字号门”表示门或入口位置，不表示楼栋号，不能与“数字#”“数字号楼”“数字栋”互认。")
     if re.search(r"[一二两三四五六七八九十百千万零〇]+(?:楼|号楼|栋|幢|座|单元|室)|单元[一二两三四五六七八九十百千万零〇]{2,6}", user_input):
-        semantic_hints.append("用户输入中的中文数字地址编号必须保留原片段，并按分段等价参与匹配：例如“一百楼一单元三零二”中“一百”可匹配候选的“100”，“一”可匹配“1”，“三零二”可匹配“302”；禁止把“一百”裁掉只剩“楼”，也不能仅凭该规则补入用户未说出的地点层级。")
+        semantic_hints.append("用户输入中的中文数字地址编号必须在用户口述范围内保留原片段，并按分段等价参与匹配：例如“一百楼一单元三零二”中“一百”可匹配候选的“100”，“一”可匹配“1”，“三零二”可匹配“302”；禁止把“一百”裁掉只剩“楼”，也不能仅凭该规则补入用户未说出的地点层级。若最终输出 match_count=1 且 matched_index>=0，matched_address_fragment 仍必须使用候选地址中的标准原文片段，不能输出用户口述中文数字片段。")
     if semantic_hints:
         context_text += f"\n[System Hint] {' '.join(semantic_hints)}"
 

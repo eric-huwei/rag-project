@@ -3505,6 +3505,31 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertNotIn("一百楼1单元302", result["user_message"])
         self.assertNotIn("一百楼1单元302", result["history_user_message"])
 
+    def test_previous_candidate_fragment_is_passed_to_llm_context(self) -> None:
+        payload = {
+            "userInput": "江洋小区",
+            "state": "matching",
+            "matchedIndex": -1,
+            "last_unmatched_address": "一百楼一单元三零二",
+            "last_unmatched_fragment": "100号楼1单元302室",
+            "similar_no_match_count": 1,
+            "kdRecords": [
+                "移机费50元山西太原市尖草坪区江阳商业街江阳化工厂100号楼1单元302室",
+            ],
+        }
+
+        for label, build_llm_message_main in (
+            ("workflow-json", _load_build_llm_message_main()),
+            ("source-file", _load_build_llm_message_file_main()),
+        ):
+            with self.subTest(label=label):
+                result = build_llm_message_main(payload)
+                user_message = result["user_message"]
+
+                self.assertIn("last_unmatched_address=100号楼1单元302室", user_message)
+                self.assertIn("last_matched_address_fragment=100号楼1单元302室", user_message)
+                self.assertNotIn("last_unmatched_address=一百楼一单元三零二", user_message)
+
     def test_room_then_homophone_town_records_candidate_corrected_text(self) -> None:
         postprocess_main = _load_address_postprocess_main()
 

@@ -1,4 +1,5 @@
 import re
+from difflib import SequenceMatcher
 
 def main(
     llm_result: dict,
@@ -910,6 +911,83 @@ def main(
         fragment_norm = _normalize_text(fragment)
         candidate_norm = _normalize_text(candidate)
         return bool(fragment_norm and candidate_norm and fragment_norm in candidate_norm)
+
+    def _strip_admin_prefix_for_tail(text: str) -> str:
+        text = _normalize_address_marker_tokens(_to_str(text))
+        if not text:
+            return ""
+
+        tail = text
+        for pattern, skip_fn in (
+            (r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:自治区|特别行政区|省)", None),
+            (r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?市", None),
+            (r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:区|县|旗)", lambda token: bool(re.search(r"(?:街道|镇|乡)", token))),
+            (r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:街道|镇|乡)", None),
+        ):
+            match = re.match(pattern, tail)
+            if not match:
+                continue
+            token = match.group(0)
+            if skip_fn and skip_fn(token):
+                continue
+            rest = tail[match.end():].strip()
+            if rest:
+                tail = rest
+
+        return tail
+
+    def _normalize_tail_compare_text(text: str) -> str:
+        text = _normalize_address_marker_tokens(_to_str(text))
+        if not text:
+            return ""
+
+        cn_number = r"[一二三四五六七八九十百零两]{1,6}"
+        text = re.sub(
+            fr"({cn_number})(号楼|楼|栋|幢|座|单元|室|号院|号|弄|里)",
+            lambda match: f"{_normalize_cn_digits(match.group(1))}{match.group(2)}",
+            text
+        )
+        text = re.sub(
+            fr"(?<![A-Za-z0-9一二三四五六七八九十百零两])({cn_number})(?![A-Za-z0-9一二三四五六七八九十百零两])",
+            lambda match: _normalize_cn_digits(match.group(1)),
+            text
+        )
+        return _normalize_text(text)
+
+    def _candidate_tail_support_score(user_text: str, candidate: str) -> float:
+        user_norm = _normalize_tail_compare_text(user_text)
+        tail_norm = _normalize_tail_compare_text(_strip_admin_prefix_for_tail(candidate))
+        if not user_norm or not tail_norm:
+            return 0.0
+        if user_norm == tail_norm:
+            return 1.0
+        if tail_norm in user_norm:
+            return len(tail_norm) / max(len(user_norm), 1)
+        if user_norm in tail_norm:
+            return len(user_norm) / max(len(tail_norm), 1)
+
+        matcher = SequenceMatcher(None, user_norm, tail_norm)
+        longest = max((match.size for match in matcher.get_matching_blocks()), default=0)
+        user_coverage = longest / max(len(user_norm), 1)
+        tail_coverage = longest / max(len(tail_norm), 1)
+        similarity = matcher.ratio()
+        return max(min(user_coverage, tail_coverage), similarity)
+
+    def _has_detail_signal_for_tail_support(text: str) -> bool:
+        return bool(_has_building_or_room(text) or _extract_house_name(text))
+
+    def _candidate_tail_supported_by_user_scope(user_text: str, candidate: str) -> bool:
+        user_text = _normalize_address_marker_tokens(_to_str(user_text))
+        candidate = _normalize_address_marker_tokens(_to_str(candidate))
+        if not user_text or not candidate:
+            return False
+        if _has_strong_conflict(user_text, candidate) or _has_precise_detail_conflict(user_text, candidate):
+            return False
+
+        score = _candidate_tail_support_score(user_text, candidate)
+        if score >= 0.85:
+            return True
+        return score >= 0.70 and _has_detail_signal_for_tail_support(user_text)
 
     def _is_weak_area_fragment(text: str) -> bool:
         text = _to_str(text)
@@ -1894,12 +1972,20 @@ def main(
 
     if llm_matched_index >= 0 and 0 <= llm_matched_index < len(address_list):
         selected_address = _to_str(address_list[llm_matched_index])
+        candidate_tail_supported = bool(
+            model_matched_address_fragment
+            and _candidate_tail_supported_by_user_scope(model_matched_address_fragment, selected_address)
+            and (
+                _candidate_tail_supported_by_user_scope(current_input, selected_address)
+                or _candidate_tail_supported_by_user_scope(effective_user_scope, selected_address)
+            )
+        )
         model_unique_fragment_supported = bool(
             current_state == "matching"
             and match_count == 1
             and not model_is_completed
             and model_matched_address_fragment
-            and user_place_context_for_unique_match
+            and (user_place_context_for_unique_match or candidate_tail_supported)
             and _fragment_supported_by_candidate(model_matched_address_fragment, selected_address)
         )
         unsupported_model_fragment = (
@@ -2232,6 +2318,94 @@ def main(
             address_list
         )
 
+    def _build_multi_match_followup(recorded_address: str, addresses: list) -> tuple[str, str]:
+        recorded_address = _normalize_address_marker_tokens(_to_str(recorded_address))
+        if not recorded_address or not isinstance(addresses, list) or len(addresses) < 2:
+            return "", ""
+
+        filtered = [
+            _to_str(address)
+            for address in addresses
+            if _to_str(address)
+            and _has_address_overlap(recorded_address, _to_str(address))
+            and not _has_precise_detail_conflict(recorded_address, _to_str(address))
+        ]
+        if len(filtered) < 2:
+            filtered = [_to_str(address) for address in addresses if _to_str(address)]
+        if len(filtered) < 2:
+            return "", ""
+
+        current_building = _extract_building_name(recorded_address)
+        current_unit = _extract_unit_name(recorded_address)
+        current_room = _extract_room_name(recorded_address)
+        current_house = _extract_house_name(recorded_address)
+
+        candidate_buildings = list(dict.fromkeys([
+            value for value in (_extract_building_name(address) for address in filtered) if value
+        ]))
+        candidate_units = list(dict.fromkeys([
+            value for value in (_extract_unit_name(address) for address in filtered) if value
+        ]))
+        candidate_rooms = list(dict.fromkeys([
+            value for value in (_extract_room_name(address) for address in filtered) if value
+        ]))
+        candidate_houses = list(dict.fromkeys([
+            value for value in (_extract_house_name(address) for address in filtered) if value
+        ]))
+
+        if current_room or current_house:
+            return "", recorded_address
+
+        if current_building:
+            if current_unit and (len(candidate_rooms) >= 2 or len(candidate_houses) >= 2 or len(filtered) >= 2):
+                return f"我记录的地址信息是：{recorded_address}，请您再提供下门牌号信息", recorded_address
+            if len(candidate_units) >= 2 and not current_unit:
+                return f"我记录的地址信息是：{recorded_address}，请您再提供下单元号及门牌号信息", recorded_address
+            if len(candidate_rooms) >= 2 or len(candidate_houses) >= 2 or len(filtered) >= 2:
+                return f"我记录的地址信息是：{recorded_address}，请您再提供下门牌号信息", recorded_address
+
+        if current_unit and not current_building:
+            return f"我记录的地址信息是：{recorded_address}，请您再提供下楼栋号及门牌号信息", recorded_address
+
+        if len(candidate_buildings) >= 2:
+            return f"我记录的地址信息是：{recorded_address}，请您再提供下楼栋号、单元号及门牌号信息", recorded_address
+        if len(candidate_units) >= 2:
+            return f"我记录的地址信息是：{recorded_address}，请您再提供下单元号及门牌号信息", recorded_address
+        if len(candidate_rooms) >= 2 or len(candidate_houses) >= 2:
+            return f"我记录的地址信息是：{recorded_address}，请您再提供下门牌号信息", recorded_address
+
+        return f"我记录的地址信息是：{recorded_address}，请您再提供下详细地址信息", recorded_address
+
+    multi_match_recorded_address = ""
+    multi_match_followup_reply = ""
+    if (
+        current_state == "matching"
+        and llm_matched_index < 0
+        and match_count > 1
+        and not is_completed
+        and not is_extract_failed
+    ):
+        multi_match_recorded_address = (
+            model_fragment_for_output
+            or effective_user_scope
+            or current_input
+        )
+        if multi_match_recorded_address:
+            multi_match_followup_reply, precise_recorded_address = _build_precise_followup(
+                mergeable_prev_unmatched,
+                multi_match_recorded_address,
+                address_list
+            )
+            if precise_recorded_address:
+                multi_match_recorded_address = precise_recorded_address
+            if not multi_match_followup_reply:
+                multi_match_followup_reply, precise_recorded_address = _build_multi_match_followup(
+                    multi_match_recorded_address,
+                    address_list
+                )
+                if precise_recorded_address:
+                    multi_match_recorded_address = precise_recorded_address
+
     should_track_unmatched = (
         current_state == "matching"
         and llm_matched_index < 0
@@ -2323,6 +2497,9 @@ def main(
         elif is_unmatched_for_fragment_count:
             next_last_unmatched_address = prev_unmatched_raw
             next_similar_no_match_count = next_fragment_repeat_count
+        elif multi_match_recorded_address:
+            next_last_unmatched_address = multi_match_recorded_address
+            next_similar_no_match_count = 0
         else:
             next_last_unmatched_address = prev_unmatched_raw
             next_similar_no_match_count = next_fragment_repeat_count
@@ -2364,6 +2541,9 @@ def main(
                 reply = REPLY_CORRECT
             else:
                 reply = REPLY_DETAIL
+    elif current_state == "matching" and llm_matched_index < 0 and match_count > 1 and not is_completed:
+        if multi_match_followup_reply:
+            reply = multi_match_followup_reply
 
     if current_state == "confirming" and current_matched_index >= 0 and _is_confirming_denial(current_input):
         llm_matched_index = -1
@@ -2451,7 +2631,7 @@ def main(
         not final_is_extract_failed
         and not final_is_completed
         and final_matched_index < 0
-        and final_match_count == 0
+        and (final_match_count == 0 or final_match_count > 1)
     ):
         next_last_unmatched_fragment = model_matched_address_fragment
 
