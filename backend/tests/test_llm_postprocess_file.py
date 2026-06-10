@@ -881,6 +881,76 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["next_last_unmatched_address"], "三号楼1201")
         self.assertEqual(result["next_similar_no_match_count"], 1)
 
+    def test_multi_match_building_room_fragment_requests_place_name(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            last_unmatched_fragment="三号楼",
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 2,
+                "is_completed": False,
+                "matched_address_fragment": "三号楼1201",
+            },
+            clean_user_input="三号楼1201",
+            last_unmatched_address="三号楼",
+            similar_no_match_count=0,
+            address_list=[
+                "福州市岳峰镇保利香槟国际东区三号楼1201",
+                "福州市岳峰镇保利香槟国际东区三号楼1200",
+            ],
+        )
+
+        self.assertEqual(result["llm_result"]["matched_index"], -1)
+        self.assertEqual(result["llm_result"]["match_count"], 2)
+        self.assertEqual(result["llm_result"]["matched_address_fragment"], "三号楼1201")
+        self.assertEqual(
+            result["llm_result"]["reply"],
+            "我记录的地址信息是：三号楼1201，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(
+            result["llm_result"]["ai_context_reply"],
+            "我记录的地址信息是：三号楼1201，请您再说一下具体的小区或村镇名称。",
+        )
+        self.assertEqual(result["next_last_unmatched_address"], "三号楼1201")
+        self.assertEqual(result["next_last_unmatched_fragment"], "三号楼1201")
+        self.assertEqual(result["next_similar_no_match_count"], 0)
+
+    def test_repeated_matched_fragment_fails_even_when_followup_can_be_built(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            last_unmatched_fragment="三号楼1201",
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": True, "reply": "请您提供详细的地址信息。"},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "matched_address_fragment": "三号楼1201",
+            },
+            clean_user_input="保留香槟",
+            last_unmatched_address="三号楼1201",
+            similar_no_match_count=1,
+            address_list=[
+                "福州市岳峰镇保利香槟国际东区三号楼1201",
+                "福州市岳峰镇保利香槟国际东区三号楼1200",
+            ],
+        )
+
+        self.assertTrue(result["llm_result"]["is_extract_failed"])
+        self.assertEqual(result["llm_result"]["matched_index"], -1)
+        self.assertEqual(result["llm_result"]["match_count"], 0)
+        self.assertEqual(result["llm_result"]["matched_address_fragment"], "")
+        self.assertEqual(result["llm_result"]["reply"], "")
+        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(result["next_last_unmatched_fragment"], "")
+        self.assertEqual(result["next_similar_no_match_count"], 2)
+
     def test_place_fragment_merges_before_building_room_and_matches_uniquely(self) -> None:
         main = _load_llm_postprocess_main()
 

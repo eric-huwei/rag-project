@@ -71,7 +71,8 @@ def main(args: dict) -> dict:
         "\u957f": ("chang", "zhang"), "\u5e38": ("chang",), "\u5c71": ("shan",), "\u519c": ("nong",), "\u573a": ("chang",),
         "\u6811": ("shu",), "\u4e1c": ("dong",), "\u6d1e": ("dong",), "\u6751": ("cun",),
         "\u4e16": ("shi",), "\u56db": ("si",), "\u5b89": ("an",), "\u65b0": ("xin",), "\u57ce": ("cheng",),
-        "\u65b9": ("fang",), "\u6b22": ("huan",), "\u666f": ("jing",), "\u4e95": ("jing",), "\u5c0f": ("xiao",), "\u533a": ("qu",),
+        "\u65b9": ("fang",), "\u82b3": ("fang",), "\u6b22": ("huan",), "\u7559": ("liu",),
+        "\u666f": ("jing",), "\u4e95": ("jing",), "\u5c0f": ("xiao",), "\u533a": ("qu",),
         "\u6ca7": ("cang",), "\u82cd": ("cang",), "\u4ed3": ("cang",), "\u53c2": ("can", "shen", "cen"),
         "\u6d77": ("hai",), "\u540d": ("ming",), "\u660e": ("ming",), "\u6c11": ("min",),
         "\u8457": ("zhu",), "\u7b51": ("zhu",), "\u4f4f": ("zhu",), "\u67f1": ("zhu",),
@@ -206,7 +207,7 @@ def main(args: dict) -> dict:
         b = str(b or "").strip()
         if not a or not b:
             return False
-        if a == b or b in _FUZZY_CHAR_MAP_FOR_PINYIN.get(a, set()):
+        if a == b:
             return True
         a_keys = char_pinyin_keys(a)
         b_keys = char_pinyin_keys(b)
@@ -892,11 +893,15 @@ def main(args: dict) -> dict:
         if _has_precise_detail_conflict(user_scope, candidate):
             return False
 
+        user_norm = normalize_text(user_scope)
+        candidate_norm = normalize_text(candidate)
+        if user_norm and candidate_norm and user_norm in candidate_norm:
+            return True
+
         terms = _extract_candidate_backed_terms(user_scope)
         if not terms:
             return has_address_overlap(user_scope, candidate)
 
-        candidate_norm = normalize_text(candidate)
         for value, norm in terms:
             if not norm:
                 continue
@@ -959,6 +964,87 @@ def main(args: dict) -> dict:
             f"matched_address_fragment 只能包含用户已说范围对应的候选支持片段，不能包含未说出的差异字段。"
         )
 
+    def _build_unique_candidate_hint(user_scope, candidates):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        if not user_scope or not isinstance(candidates, list) or len(candidates) < 2:
+            return ""
+
+        matched_candidates = [
+            (idx, str(candidate))
+            for idx, candidate in enumerate(candidates)
+            if _candidate_supports_user_scope(user_scope, candidate)
+        ]
+        if len(matched_candidates) != 1:
+            return ""
+
+        matched_idx, matched_candidate = matched_candidates[0]
+        return (
+            f"合并后的用户已说范围“{user_scope}”只匹配第 {matched_idx} 条候选“{matched_candidate}”；"
+            f"本轮必须输出 matched_index={matched_idx}, match_count=1, is_completed=false；"
+            f"matched_address_fragment 必须保留该合并范围对应的候选支持片段，不能降级为仅 clean_user_input。"
+        )
+
+    def _char_pinyin_label(ch):
+        ch = str(ch or "").strip()
+        if not ch:
+            return ""
+        values = []
+        if has_pinyin and re.fullmatch(r"[\u4e00-\u9fa5]", ch):
+            try:
+                values = pypinyin.pinyin(ch, heteronym=True, style=pypinyin.NORMAL)[0]
+            except Exception:
+                values = []
+        if not values:
+            values = list(_PINYIN_CHAR_OVERRIDES.get(ch, ()))
+        if not values and re.fullmatch(r"[A-Za-z0-9]", ch):
+            values = [ch.lower()]
+        values = [str(value).lower().replace("\u00fc", "v").replace("u:", "v") for value in values if value]
+        return "/".join(dict.fromkeys(values))
+
+    def _build_phonetic_mismatch_hint(user_scope, candidates):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        if not user_scope or not isinstance(candidates, list) or not candidates:
+            return ""
+
+        user_compact = re.sub(r"\s+", "", user_scope)
+        user_norm = normalize_text(user_compact)
+        if len(user_norm) < 2:
+            return ""
+
+        for candidate in candidates:
+            candidate_compact = re.sub(r"\s+", "", normalize_address_marker_tokens(str(candidate or "").strip()))
+            if len(candidate_compact) < len(user_compact):
+                continue
+
+            for start in range(len(candidate_compact) - len(user_compact) + 1):
+                candidate_span = candidate_compact[start:start + len(user_compact)]
+                exact_count = 0
+                mismatch_pairs = []
+                for user_ch, candidate_ch in zip(user_compact, candidate_span):
+                    if user_ch == candidate_ch:
+                        exact_count += 1
+                        continue
+                    if chars_phonetic_equal(user_ch, candidate_ch):
+                        continue
+                    mismatch_pairs.append((user_ch, candidate_ch))
+
+                if not mismatch_pairs or exact_count < max(1, len(user_compact) - 1):
+                    continue
+
+                mismatch_text = "、".join(
+                    f"{user_ch}({_char_pinyin_label(user_ch) or '无拼音'})≠"
+                    f"{candidate_ch}({_char_pinyin_label(candidate_ch) or '无拼音'})"
+                    for user_ch, candidate_ch in mismatch_pairs[:3]
+                )
+                return (
+                    f"用户片段“{user_compact}”与候选片段“{candidate_span}”存在拼音不等价字符："
+                    f"{mismatch_text}；禁止将这类不同音节内容按拼音纠错，"
+                    "也不能据此把用户片段纠正为该候选片段或补入候选未说出的地址层级；"
+                    "但如果用户片段与其他候选精确一致，仍应按精确匹配结果判断唯一匹配。"
+                )
+
+        return ""
+
     def merge_with_previous_address(prev_text, curr_text):
         prev_text = str(prev_text or "").strip()
         curr_text = str(curr_text or "").strip()
@@ -980,7 +1066,12 @@ def main(args: dict) -> dict:
         if curr_norm == prev_norm:
             return prev_text
 
-        if curr_norm and curr_norm in prev_norm:
+        curr_is_specific_street_under_subdistrict = bool(
+            curr_text.endswith("街")
+            and not curr_text.endswith("街道")
+            and f"{curr_text}道" in prev_text
+        )
+        if curr_norm and curr_norm in prev_norm and not curr_is_specific_street_under_subdistrict:
             return prev_text
 
         if prev_norm and prev_norm in curr_norm:
@@ -1015,21 +1106,22 @@ def main(args: dict) -> dict:
     last_unmatched_address = strip_non_merge_history(last_unmatched_address_raw)
     last_unmatched_fragment = strip_non_merge_history(last_unmatched_fragment_raw)
     llm_last_unmatched_address = last_unmatched_fragment or last_unmatched_address
-    can_merge_with_previous = bool(last_unmatched_address) and not is_non_merge_history(last_unmatched_address_raw)
+    merge_base_address = last_unmatched_fragment or last_unmatched_address
+    can_merge_with_previous = bool(merge_base_address) and not is_non_merge_history(last_unmatched_address_raw)
 
-    effective_match_input = merge_with_previous_address(last_unmatched_address if can_merge_with_previous else "", clean_input)
+    possible_merged_input = merge_with_previous_address(merge_base_address if can_merge_with_previous else "", clean_input)
 
     candidate_backed_effective_input = (
-        _find_candidate_backed_merge(last_unmatched_address, clean_input, kd_records)
+        _find_candidate_backed_merge(merge_base_address, clean_input, kd_records)
         if can_merge_with_previous and clean_input
         else ""
     )
     if candidate_backed_effective_input:
-        effective_match_input = candidate_backed_effective_input
+        possible_merged_input = candidate_backed_effective_input
 
-    is_supplement_fragment = (
+    is_possible_supplement_fragment = (
         can_merge_with_previous
-        and normalize_text(effective_match_input) != normalize_text(clean_input)
+        and normalize_text(possible_merged_input) != normalize_text(clean_input)
     )
 
     is_address_correction = bool(clean_input) and clean_input != raw_clean_input
@@ -1044,10 +1136,17 @@ def main(args: dict) -> dict:
     if matched_index_int >= 0 and prompt_state != "matching":
         context_parts.append(f"matched_index={matched_index_int}")
 
+    if clean_input:
+        context_parts.append(f"clean_user_input={clean_input}")
+
+    if last_unmatched_address:
+        context_parts.append(f"last_unmatched_address={last_unmatched_address}")
+    if last_unmatched_fragment:
+        context_parts.append(f"last_matched_address_fragment={last_unmatched_fragment}")
+    if is_possible_supplement_fragment and possible_merged_input:
+        context_parts.append(f"candidate_combined_user_scope_if_supplement={possible_merged_input}")
+
     if llm_last_unmatched_address:
-        context_parts.append(f"last_unmatched_address={llm_last_unmatched_address}")
-        if last_unmatched_fragment:
-            context_parts.append(f"last_matched_address_fragment={last_unmatched_fragment}")
         if has_pinyin:
             prev_pys = pypinyin.pinyin(llm_last_unmatched_address, heteronym=False, style=pypinyin.NORMAL)
             prev_py_str = " ".join([p[0] for p in prev_pys]) if prev_pys else ""
@@ -1101,14 +1200,40 @@ def main(args: dict) -> dict:
 
     context_text = ", ".join(context_parts)
 
-    display_scope = effective_match_input or clean_input
+    display_scope = clean_input
     if display_scope:
         context_text += (
             f"\n[Display Constraint] If reply starts with the recorded-address prefix, "
-            f"the recorded address must only use this user-spoken scope: {display_scope}. "
+            f"the recorded address must only use clean_user_input: {display_scope}, "
+            "unless the model first judges clean_user_input is a supplement to "
+            "last_matched_address_fragment/last_unmatched_address; in that supplement case, "
+            "the recorded address may use the combined user-spoken scope made only from those fields. "
             "Use candidates_info only for matching, same-scope homophone correction, and missing-level judgment. "
             "Do not add or append candidate-only province/city/district/town/road/community/building/unit/room text into reply. "
-            "A correction may only replace an already-spoken span with similar-length same-scope text."
+            "A correction may only replace an already-spoken span with similar-length same-scope text. "
+            "Pinyin correction is limited to identical pronunciation, polyphone pronunciation overlap, "
+            "zh/z, ch/c, sh/s initials, and front/back nasal finals; different syllables must not be corrected."
+        )
+
+    phonetic_mismatch_hint = _build_phonetic_mismatch_hint(
+        display_scope,
+        [clean_rec for _record_str, clean_rec in raw_clean_recs],
+    )
+    if phonetic_mismatch_hint:
+        context_text += f"\n[System Hint] {phonetic_mismatch_hint}"
+
+    previous_context_fragment = last_unmatched_fragment or last_unmatched_address
+    if clean_input and previous_context_fragment:
+        context_text += (
+            f"\n[System Hint] 本轮 User 只表示 clean_user_input“{clean_input}”，"
+            "不是与上一轮地址自动拼接后的文本。请先判断 clean_user_input 与 "
+            f"last_matched_address_fragment/last_unmatched_address“{previous_context_fragment}”的关系："
+            "若是补充上一轮地址，可将上一轮片段与本轮片段共同视为用户已说范围参与匹配；"
+            "若是纠正、冲突、全新地址或无关内容，则不要强行合并。"
+            "matched_address_fragment 只能输出模型判定后的用户已说且候选支持范围；"
+            "如果判定为补充上一轮地址，matched_address_fragment 必须包含上一轮片段和本轮片段，"
+            "不能只输出 clean_user_input 本轮片段。"
+            "禁止补入候选中用户未说出的路名、楼栋、单元、门牌或房间号。"
         )
 
     candidate_supported_fragment = _candidate_supported_user_fragment(
@@ -1127,18 +1252,50 @@ def main(args: dict) -> dict:
             f"若该支持片段能唯一命中候选，matched_address_fragment 应输出候选原文中的对应片段“{candidate_supported_fragment}”。"
         )
 
-    ambiguity_hint = _build_ambiguous_candidate_hint(
-        display_scope,
-        [clean_rec for _record_str, clean_rec in raw_clean_recs],
-    )
-    if ambiguity_hint:
-        context_text += f"\n[System Hint] {ambiguity_hint}"
+    if previous_context_fragment:
+        combined_context_scope = (
+            _find_candidate_backed_merge(
+                previous_context_fragment,
+                display_scope,
+                [clean_rec for _record_str, clean_rec in raw_clean_recs],
+            )
+            or _combine_address_parts(previous_context_fragment, display_scope)
+        )
+        unique_supplement_hint = _build_unique_candidate_hint(
+            combined_context_scope,
+            [clean_rec for _record_str, clean_rec in raw_clean_recs],
+        )
+        if unique_supplement_hint:
+            context_text += f"\n[System Hint] {unique_supplement_hint}"
+        else:
+            ambiguity_hint = _build_ambiguous_candidate_hint(
+                combined_context_scope,
+                [clean_rec for _record_str, clean_rec in raw_clean_recs],
+            )
+            if ambiguity_hint:
+                context_text += f"\n[System Hint] {ambiguity_hint}"
+            else:
+                context_text += (
+                    "\n[System Hint] 如果你判断本轮是在补充上一轮地址，"
+                    "请先用合并后的用户已说范围重新筛选 candidates_info："
+                    "若能缩到唯一候选，必须输出 match_count=1；"
+                    "只有合并后仍匹配多条候选时，才输出 matched_index=-1、match_count=可匹配候选数量。"
+                    "matched_address_fragment 应保留合并后的用户已说且候选支持范围，"
+                    "不得降级为仅 clean_user_input。"
+                )
+    else:
+        ambiguity_hint = _build_ambiguous_candidate_hint(
+            display_scope,
+            [clean_rec for _record_str, clean_rec in raw_clean_recs],
+        )
+        if ambiguity_hint:
+            context_text += f"\n[System Hint] {ambiguity_hint}"
 
     if is_address_correction:
         context_text += f"\n[System Hint] 用户正在纠正上一条地址，本轮有效地址片段更可能是: {clean_input}。如当前状态不是matching，请按新的匹配请求处理。"
 
     pinyin_source_input = clean_input
-    if has_pinyin and pinyin_source_input and not is_supplement_fragment:
+    if has_pinyin and pinyin_source_input:
         t1 = re.sub(r"[^\w\u4e00-\u9fff]+", "", pinyin_source_input)
         if t1:
             user_pys = [set(p) for p in pypinyin.pinyin(t1, heteronym=True, style=pypinyin.NORMAL)]
@@ -1159,13 +1316,13 @@ def main(args: dict) -> dict:
                     match_hint = ""
                     if 0 < n_u <= n_r:
                         for i_r in range(n_r - n_u + 1):
-                            if all((user_pys[j] & record_pys[i_r + j]) for j in range(n_u)):
+                            if all(chars_phonetic_equal(t1[j], t2[i_r + j]) for j in range(n_u)):
                                 matched_span = t2[i_r:i_r + n_u]
                                 match_hint = f"{t1}~{matched_span}" if matched_span and matched_span != t1 else t1
                                 break
                     elif 0 < n_r <= n_u:
                         for i_u in range(n_u - n_r + 1):
-                            if all((record_pys[j] & user_pys[i_u + j]) for j in range(n_r)):
+                            if all(chars_phonetic_equal(t2[j], t1[i_u + j]) for j in range(n_r)):
                                 user_span = t1[i_u:i_u + n_r]
                                 match_hint = f"{user_span}~{t2}" if user_span and user_span != t2 else t2
                                 break
@@ -1187,18 +1344,10 @@ def main(args: dict) -> dict:
     if semantic_hints:
         context_text += f"\n[System Hint] {' '.join(semantic_hints)}"
 
-    if can_merge_with_previous and effective_match_input != clean_input:
-        context_text += (
-            f"\n[System Hint] 用户本轮更像是在补充上一轮未匹配地址，请优先将 "
-            f"last_unmatched_address 与本轮片段合并理解。本轮合并后地址更可能是: {effective_match_input}。"
-            f" 若合并后地址与候选存在明显地域冲突，请忽略仅凭本轮片段得到的拼音直匹配。"
-        )
-
-    effective_user_input = effective_match_input or clean_input
+    effective_user_input = clean_input
     combined = f"{context_text}\nUser: {effective_user_input}" if effective_user_input else context_text
 
-    # 关键：补充片段场景下，历史里保存拼接后的完整地址
-    history_base = effective_match_input if is_supplement_fragment else clean_input
+    history_base = clean_input
     history_msg = history_base
     if has_pinyin and history_msg:
         raw_pys = pypinyin.pinyin(history_msg, heteronym=False, style=pypinyin.NORMAL)
@@ -1210,5 +1359,7 @@ def main(args: dict) -> dict:
         "user_message": combined,
         "history_user_message": history_msg,
         "clean_user_input": clean_input,
-        "effective_match_input": effective_match_input
+        "llm_user_input": clean_input,
+        "effective_match_input": possible_merged_input or clean_input,
+        "possible_merged_input": possible_merged_input if is_possible_supplement_fragment else ""
     }

@@ -912,6 +912,35 @@ def main(
         candidate_norm = _normalize_text(candidate)
         return bool(fragment_norm and candidate_norm and fragment_norm in candidate_norm)
 
+    def _has_literal_candidate_overlap_with_addresses(text: str, addresses: list) -> bool:
+        raw_text = _to_str(text)
+        if len(raw_text) >= 2 and any(raw_text in _to_str(address) for address in addresses):
+            return True
+        text_norm = _normalize_text(text)
+        if len(text_norm) < 2:
+            return False
+        return any(text_norm in _normalize_text(address) for address in addresses)
+
+    def _has_candidate_overlap_with_addresses(text: str, addresses: list) -> bool:
+        return bool(
+            text
+            and (
+                _has_any_candidate_overlap(text, addresses)
+                or _has_literal_candidate_overlap_with_addresses(text, addresses)
+            )
+        )
+
+    def _should_use_model_fragment_fallback(raw_input: str, model_fragment: str, addresses: list) -> bool:
+        return bool(
+            current_state == "matching"
+            and raw_input
+            and model_fragment
+            and isinstance(addresses, list)
+            and addresses
+            and not _has_candidate_overlap_with_addresses(raw_input, addresses)
+            and _has_candidate_overlap_with_addresses(model_fragment, addresses)
+        )
+
     def _strip_admin_prefix_for_tail(text: str) -> str:
         text = _normalize_address_marker_tokens(_to_str(text))
         if not text:
@@ -1755,6 +1784,7 @@ def main(
         and current_raw_input
         and not ignored_no_overlap_input
         and _has_building_or_room(mergeable_prev_unmatched)
+        and not _has_building_or_room(current_raw_input)
         and (_has_place_anchor(current_raw_input) or _has_named_place_anchor(current_raw_input))
     ):
         place_first_scope = _merge_user_spoken_scope(current_raw_input, mergeable_prev_unmatched)
@@ -1863,6 +1893,19 @@ def main(
                 return _build_extract_failed_result()
             return _build_confirming_repeat_result(next_repeat_count)
 
+    model_matched_address_fragment = _normalize_address_marker_tokens(
+        _to_str(llm_result.get("matched_address_fragment"))
+    )
+    use_model_fragment_fallback = _should_use_model_fragment_fallback(
+        current_raw_input,
+        model_matched_address_fragment,
+        address_list
+    )
+    if use_model_fragment_fallback:
+        current_input = model_matched_address_fragment
+        effective_user_scope = model_matched_address_fragment
+        ignored_no_overlap_input = False
+
     meaningless_flag = _to_bool(
         meaningless_result.get(
             "is_meaningless",
@@ -1870,6 +1913,10 @@ def main(
         )
     )
     meaningless_reply = _to_str(meaningless_result.get("reply"))
+
+    if use_model_fragment_fallback:
+        meaningless_flag = False
+        meaningless_reply = ""
 
     if meaningless_flag and current_input and _looks_like_address(current_input):
         meaningless_flag = False
@@ -1928,9 +1975,6 @@ def main(
     model_match_count = max(_to_int(llm_result.get("match_count"), 0), 0)
     model_matched_index = _to_int(llm_result.get("matched_index"), -1)
     model_is_completed = _to_bool(llm_result.get("is_completed", False))
-    model_matched_address_fragment = _normalize_address_marker_tokens(
-        _to_str(llm_result.get("matched_address_fragment"))
-    )
     model_fragment_for_output = _sanitize_recorded_address(
         model_matched_address_fragment,
         effective_user_scope or current_input,
@@ -2275,7 +2319,11 @@ def main(
     detail_scope_corrected_input = ""
     detail_scope_recorded_address = ""
     use_detail_scope_recorded_address = False
-    display_recorded_address = prev_unmatched if model_reuses_previous_fragment else current_raw_input
+    display_recorded_address = (
+        model_matched_address_fragment
+        if use_model_fragment_fallback
+        else (prev_unmatched if model_reuses_previous_fragment else current_raw_input)
+    )
     fragment_followup_reply = ""
     fragment_recorded_address = ""
     if current_state == "matching" and llm_matched_index < 0 and match_count == 0 and not is_completed and not is_extract_failed:
@@ -2322,6 +2370,18 @@ def main(
         recorded_address = _normalize_address_marker_tokens(_to_str(recorded_address))
         if not recorded_address or not isinstance(addresses, list) or len(addresses) < 2:
             return "", ""
+
+        has_place_scope = bool(
+            _extract_community_name(recorded_address)
+            or _extract_road_name(recorded_address)
+            or _has_place_anchor(recorded_address)
+            or _has_named_place_anchor(recorded_address)
+        )
+        if not has_place_scope and (_has_building_or_room(recorded_address) or _extract_house_name(recorded_address)):
+            return (
+                f"我记录的地址信息是：{recorded_address}，请您再说一下具体的小区或村镇名称。",
+                recorded_address,
+            )
 
         filtered = [
             _to_str(address)
@@ -2387,8 +2447,14 @@ def main(
     ):
         multi_match_recorded_address = (
             model_fragment_for_output
+            or (
+                _merge_user_spoken_scope(mergeable_prev_unmatched, current_raw_input)
+                if mergeable_prev_unmatched and current_raw_input
+                else ""
+            )
             or effective_user_scope
             or current_input
+            or current_raw_input
         )
         if multi_match_recorded_address:
             multi_match_followup_reply, precise_recorded_address = _build_precise_followup(
@@ -2449,12 +2515,22 @@ def main(
     else:
         next_fragment_repeat_count = prev_repeat_count + 1 if not previous_unmatched_fragment_norm else 1
 
+    has_followup_reply = bool(
+        custom_followup_reply
+        or fragment_followup_reply
+        or previous_context_followup_reply
+        or candidate_backed_partial_reply
+    )
+    if is_unmatched_for_fragment_count and has_followup_reply and not current_unmatched_fragment_norm:
+        next_fragment_repeat_count = prev_repeat_count
+
     should_fail_for_consecutive_no_overlap = (
         is_unmatched_for_fragment_count
         and (
             repeated_non_empty_fragment
             or not current_unmatched_fragment_norm
         )
+        and not (has_followup_reply and not current_unmatched_fragment_norm)
         and _should_fail_by_repeat(next_fragment_repeat_count)
     )
 
@@ -2542,8 +2618,11 @@ def main(
             else:
                 reply = REPLY_DETAIL
     elif current_state == "matching" and llm_matched_index < 0 and match_count > 1 and not is_completed:
-        if multi_match_followup_reply:
-            reply = multi_match_followup_reply
+        reply = multi_match_followup_reply or (
+            f"我记录的地址信息是：{multi_match_recorded_address}，请您再提供下详细地址信息"
+            if multi_match_recorded_address
+            else REPLY_DETAIL
+        )
 
     if current_state == "confirming" and current_matched_index >= 0 and _is_confirming_denial(current_input):
         llm_matched_index = -1
@@ -2608,7 +2687,12 @@ def main(
             return f"{recorded_reply_prefix}{recorded_address}{reply_tail[split_index:]}"
         return f"{recorded_reply_prefix}{recorded_address}"
 
-    final_reply = _replace_recorded_reply_address(final_reply, display_recorded_address)
+    final_display_recorded_address = (
+        multi_match_recorded_address
+        if final_match_count > 1 and final_matched_index < 0 and multi_match_recorded_address
+        else display_recorded_address
+    )
+    final_reply = _replace_recorded_reply_address(final_reply, final_display_recorded_address)
 
     final_matched_address_fragment = ""
     if not final_is_completed and not final_is_extract_failed:

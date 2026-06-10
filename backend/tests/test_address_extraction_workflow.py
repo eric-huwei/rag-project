@@ -420,7 +420,10 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("User: 三号楼1201保利香槟", result["user_message"])
+        self.assertIn("User: 保利香槟", result["user_message"])
+        self.assertIn("last_unmatched_address=三号楼1201", result["user_message"])
+        self.assertIn("本轮 User 只表示 clean_user_input", result["user_message"])
+        self.assertEqual(result["llm_user_input"], "保利香槟")
         self.assertEqual(result["effective_match_input"], "三号楼1201保利香槟")
 
     def test_build_llm_message_keeps_east_area_after_room_number(self) -> None:
@@ -440,7 +443,9 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("User: 三号楼1201东区保利香槟", result["user_message"])
+        self.assertIn("User: 保利香槟", result["user_message"])
+        self.assertIn("last_unmatched_address=三号楼1201东区", result["user_message"])
+        self.assertEqual(result["llm_user_input"], "保利香槟")
         self.assertEqual(result["effective_match_input"], "三号楼1201东区保利香槟")
         self.assertNotIn("1201栋区", result["user_message"])
 
@@ -1724,7 +1729,10 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("User: 1201三号楼东区", result["user_message"])
+        self.assertIn("User: 东区", result["user_message"])
+        self.assertIn("last_unmatched_address=1201三号楼", result["user_message"])
+        self.assertEqual(result["llm_user_input"], "东区")
+        self.assertEqual(result["possible_merged_input"], "1201三号楼东区")
         self.assertEqual(result["effective_match_input"], "1201三号楼东区")
 
     def test_overlap_fragments_keep_concatenating_across_three_turns(self) -> None:
@@ -3399,7 +3407,7 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
 
         result = build_llm_message_main(
             {
-                "userInput": "欢景小区",
+                "userInput": "芳景小区",
                 "state": "matching",
                 "matchedIndex": -1,
                 "last_unmatched_address": "世安新城",
@@ -3412,6 +3420,80 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(result["effective_match_input"], "世安新城方景小区")
+        self.assertEqual(result["llm_user_input"], "芳景小区")
+        self.assertEqual(result["possible_merged_input"], "世安新城方景小区")
+        self.assertIn("User: 芳景小区", result["user_message"])
+
+    def test_build_llm_message_rejects_different_syllable_named_place_correction(self) -> None:
+        payload = {
+            "userInput": "保留香槟",
+            "state": "matching",
+            "matchedIndex": -1,
+            "last_unmatched_address": "三号楼1201",
+            "last_unmatched_fragment": "三号楼1201",
+            "similar_no_match_count": 1,
+            "kdRecords": [
+                "福州市岳峰镇保利香槟国际东区三号楼1201",
+                "福州市岳峰镇保利香槟国际东区三号楼1200",
+            ],
+        }
+
+        for label, build_llm_message_main in (
+            ("workflow-json", _load_build_llm_message_main()),
+            ("source-file", _load_build_llm_message_file_main()),
+        ):
+            with self.subTest(label=label):
+                result = build_llm_message_main(payload)
+                user_message = result["user_message"]
+
+                self.assertEqual(result["clean_user_input"], "保留香槟")
+                self.assertEqual(result["llm_user_input"], "保留香槟")
+                self.assertEqual(result["effective_match_input"], "保留香槟")
+                self.assertEqual(result["possible_merged_input"], "")
+                self.assertIn("User: 保留香槟", user_message)
+                self.assertIn("保留香槟", user_message)
+                self.assertIn("保利香槟", user_message)
+                self.assertIn("留(liu)≠利(li)", user_message)
+                self.assertIn("不同音节", user_message)
+                self.assertNotIn("根据拼音(多音字)发现用户片段与候选片段相近: 保留香槟~保利香槟", user_message)
+
+    def test_build_llm_message_lets_model_judge_current_input_against_previous_fragment(self) -> None:
+        payload = {
+            "userInput": "保利香槟",
+            "state": "matching",
+            "matchedIndex": -1,
+            "last_unmatched_address": "福州市鼓楼区",
+            "last_unmatched_fragment": "福州市鼓楼区",
+            "similar_no_match_count": 1,
+            "kdRecords": [
+                "福建省福州市鼓楼区中山路保利香槟国际八号楼2103",
+                "福建省福州市鼓楼区中山路保利香槟国际八号楼2101",
+            ],
+        }
+
+        for label, build_llm_message_main in (
+            ("workflow-json", _load_build_llm_message_main()),
+            ("source-file", _load_build_llm_message_file_main()),
+        ):
+            with self.subTest(label=label):
+                result = build_llm_message_main(payload)
+                user_message = result["user_message"]
+
+                self.assertEqual(result["clean_user_input"], "保利香槟")
+                self.assertEqual(result["llm_user_input"], "保利香槟")
+                self.assertEqual(result["effective_match_input"], "福州市鼓楼区保利香槟")
+                self.assertEqual(result["possible_merged_input"], "福州市鼓楼区保利香槟")
+                self.assertIn("clean_user_input=保利香槟", user_message)
+                self.assertIn("last_matched_address_fragment=福州市鼓楼区", user_message)
+                self.assertIn(
+                    "candidate_combined_user_scope_if_supplement=福州市鼓楼区保利香槟",
+                    user_message,
+                )
+                self.assertIn("User: 保利香槟", user_message)
+                self.assertNotIn("User: 福州市鼓楼区保利香槟", user_message)
+                self.assertIn("请先判断 clean_user_input", user_message)
+                self.assertIn("不能只输出 clean_user_input 本轮片段", user_message)
+                self.assertNotIn("候选支持的地址片段是“福州市鼓楼区”", user_message)
 
     def test_numeric_suffix_prefix_overlap_merges_without_duplication(self) -> None:
         build_llm_message_main = _load_build_llm_message_main()
@@ -3428,7 +3510,9 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(result["effective_match_input"], "A1201")
-        self.assertIn("User: A1201", result["user_message"])
+        self.assertEqual(result["llm_user_input"], "1201")
+        self.assertEqual(result["possible_merged_input"], "A1201")
+        self.assertIn("User: 1201", result["user_message"])
         self.assertNotIn("A1201201", result["user_message"])
 
     def test_address_context_suffix_prefix_overlap_merges_without_duplication(self) -> None:
@@ -3449,7 +3533,9 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(result["effective_match_input"], "福州市岳峰镇保利香槟国际东区三号楼1201")
-        self.assertIn("User: 福州市岳峰镇保利香槟国际东区三号楼1201", result["user_message"])
+        self.assertEqual(result["llm_user_input"], "1201")
+        self.assertEqual(result["possible_merged_input"], "福州市岳峰镇保利香槟国际东区三号楼1201")
+        self.assertIn("User: 1201", result["user_message"])
         self.assertNotIn("1201201", result["user_message"])
 
     def test_chinese_numeric_detail_preserved_on_first_candidate_overlap_cleaning(self) -> None:
@@ -3476,9 +3562,9 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
                 self.assertEqual(result["clean_user_input"], "一百楼一单元三零二")
                 self.assertEqual(result["effective_match_input"], "一百楼一单元三零二")
                 self.assertIn("User: 一百楼一单元三零二", result["user_message"])
-                self.assertIn("user-spoken scope: 一百楼一单元三零二", result["user_message"])
+                self.assertIn("clean_user_input: 一百楼一单元三零二", result["user_message"])
                 self.assertNotIn("User: 楼一单元三零二", result["user_message"])
-                self.assertNotIn("user-spoken scope: 楼一单元三零二", result["user_message"])
+                self.assertNotIn("clean_user_input: 楼一单元三零二", result["user_message"])
 
     def test_chinese_numeric_detail_preserved_when_candidate_backed_supplement_merges(self) -> None:
         build_llm_message_main = _load_build_llm_message_main()
@@ -3500,8 +3586,11 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
 
         expected = "一百楼一单元三零二江阳化工厂"
         self.assertEqual(result["effective_match_input"], expected)
-        self.assertIn(f"User: {expected}", result["user_message"])
-        self.assertIn(f"user-spoken scope: {expected}", result["user_message"])
+        self.assertEqual(result["llm_user_input"], "江阳化工厂")
+        self.assertEqual(result["possible_merged_input"], expected)
+        self.assertIn("User: 江阳化工厂", result["user_message"])
+        self.assertIn("last_unmatched_address=一百楼一单元三零二", result["user_message"])
+        self.assertIn("clean_user_input: 江阳化工厂", result["user_message"])
         self.assertNotIn("一百楼1单元302", result["user_message"])
         self.assertNotIn("一百楼1单元302", result["history_user_message"])
 
