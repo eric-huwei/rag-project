@@ -1,5 +1,6 @@
 import re
 import json
+from functools import lru_cache
 
 def main(args: dict) -> dict:
     try:
@@ -30,6 +31,24 @@ def main(args: dict) -> dict:
             return text[len(NON_MERGE_HISTORY_PREFIX):].strip()
         return text
 
+    def strip_embedded_reason_field(text):
+        text = str(text or "").strip()
+        if not text:
+            return ""
+        text = re.sub(
+            r"""(?is)\s*[,，]?\\?["']?\s*reason\s*\\?["']?\s*[:：]\s*\\?["']?(?:one|two|true|false|只命中最后一级|只命中倒数第二级|命中最后两级)?\\?["']?.*$""",
+            "",
+            text
+        )
+        text = re.sub(
+            r"""(?is)\s*[,，]?\s*['"]?\s*reason\s*['"]?\s*[:：]\s*['"]?(?:one|two|true|false|只命中最后一级|只命中倒数第二级|命中最后两级)?['"]?.*$""",
+            "",
+            text
+        )
+        text = re.sub(r"""(?is)\s*\\?["']\s*[,，]\s*\\?["']?\s*reason\s*\\?["']?.*$""", "", text)
+        text = re.sub(r"""(?is)\s*['"],\s*['"]?\s*reason\s*['"]?.*$""", "", text)
+        return text.strip(" ,，'\"")
+
     def clean_prefix(text):
         if not text:
             return ""
@@ -52,9 +71,114 @@ def main(args: dict) -> dict:
 
         return text.strip()
 
+    def _has_candidate_noise_address_evidence(text):
+        text = normalize_address_marker_tokens(str(text or "").strip())
+        if not text:
+            return False
+
+        norm = normalize_text(text)
+        if not norm:
+            return False
+
+        if re.search(r"[A-Za-z0-9]", norm):
+            return True
+        if _has_strong_address_structure(text):
+            return True
+        if is_weak_area_fragment(text):
+            return True
+        if re.search(
+            r"(省|市|区|县|旗|镇|乡|街道|大道|路|巷|胡同|街|小区|社区|园区|校区|景区|厂区|"
+            r"花园|公园|家园|公寓|大厦|广场|中心|大院|苑|府|村|庄|城|湾|庭|郡|都|"
+            r"栋|幢|座|楼|单元|室|号|院|弄|里|门|口|侧|东|西|南|北|中|"
+            r"厂|公司|学校|医院|商场|市场|酒店)",
+            text
+        ):
+            return True
+
+        return False
+
+    def _is_discardable_candidate_noise(text):
+        text = normalize_address_marker_tokens(str(text or "").strip())
+        if not text:
+            return True
+
+        return not _has_candidate_noise_address_evidence(text)
+
+    def clean_candidate_supported_noise(text, candidates):
+        text = normalize_address_marker_tokens(str(text or "").strip())
+        if not text or not isinstance(candidates, list) or not candidates:
+            return text
+
+        text_norm = normalize_text(text)
+        if not text_norm:
+            return text
+
+        normalized_candidates = []
+        for candidate in candidates:
+            candidate_text = normalize_address_marker_tokens(str(candidate or "").strip())
+            candidate_norm = normalize_text(candidate_text)
+            if candidate_text and candidate_norm:
+                normalized_candidates.append((candidate_text, candidate_norm))
+
+        if not normalized_candidates:
+            return text
+
+        for candidate_text, candidate_norm in normalized_candidates:
+            if text_norm in candidate_norm or _phonetic_substring_match(text, candidate_text):
+                return text
+
+        best = None
+        text_len = len(text)
+        for candidate_text, candidate_norm in normalized_candidates:
+            for start in range(text_len):
+                for end in range(start + 2, text_len + 1):
+                    if start == 0 and end == text_len:
+                        continue
+
+                    span = text[start:end]
+                    span_norm = normalize_text(span)
+                    if len(span_norm) < 2:
+                        continue
+
+                    supported = span_norm in candidate_norm or _phonetic_substring_match(span, candidate_text)
+                    if not supported:
+                        continue
+
+                    has_signal = (
+                        _has_candidate_overlap_span_signal(span)
+                        or has_building_or_room(span)
+                        or bool(_extract_house_name(span))
+                        or is_room_number_fragment(span)
+                    )
+                    if not has_signal:
+                        continue
+
+                    prefix = text[:start]
+                    suffix = text[end:]
+                    if not _is_discardable_candidate_noise(prefix):
+                        continue
+                    if not _is_discardable_candidate_noise(suffix):
+                        continue
+
+                    prefix_norm = normalize_text(prefix)
+                    suffix_norm = normalize_text(suffix)
+                    score = (
+                        len(span_norm) * 100
+                        + (30 if has_signal else 0)
+                        - len(prefix_norm) * 5
+                        - len(suffix_norm) * 5
+                        - start
+                    )
+                    item = (score, len(span_norm), span)
+                    if best is None or item > best:
+                        best = item
+
+        return best[2].strip() if best else text
+
     def extract_effective_input(text):
         return clean_prefix(text)
 
+    @lru_cache(maxsize=4096)
     def normalize_text(text):
         text = str(text or "").strip()
         text = normalize_address_marker_tokens(text)
@@ -111,6 +235,7 @@ def main(args: dict) -> dict:
     _CN_NUMBER_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
     _CN_ADDRESS_NUMBER_CHARS = "一二两三四五六七八九十百千万零〇"
 
+    @lru_cache(maxsize=1024)
     def _cn_number_to_arabic(text):
         text = str(text or "").strip()
         if not text:
@@ -139,6 +264,7 @@ def main(args: dict) -> dict:
 
         return str(total + section + number)
 
+    @lru_cache(maxsize=4096)
     def normalize_address_number_compare_tokens(text):
         text = str(text or "").strip()
         if not text:
@@ -162,6 +288,7 @@ def main(args: dict) -> dict:
         text = text.replace("号楼", "楼")
         return text
 
+    @lru_cache(maxsize=1024)
     def pinyin_variants(py):
         py = str(py or "").lower().replace("\u00fc", "v").replace("u:", "v")
         py = re.sub(r"[^a-zv]", "", py)
@@ -183,6 +310,7 @@ def main(args: dict) -> dict:
                 variants.add(item[:-3] + "in")
         return variants
 
+    @lru_cache(maxsize=2048)
     def char_pinyin_keys(ch):
         ch = str(ch or "").strip()
         if not ch:
@@ -202,6 +330,7 @@ def main(args: dict) -> dict:
             keys.add(ch.lower())
         return keys
 
+    @lru_cache(maxsize=4096)
     def chars_phonetic_equal(a, b):
         a = str(a or "").strip()
         b = str(b or "").strip()
@@ -213,6 +342,7 @@ def main(args: dict) -> dict:
         b_keys = char_pinyin_keys(b)
         return bool(a_keys and b_keys and a_keys.intersection(b_keys))
 
+    @lru_cache(maxsize=4096)
     def phonetic_text_overlap(a, b):
         a_norm = normalize_text(a)
         b_norm = normalize_text(b)
@@ -229,6 +359,7 @@ def main(args: dict) -> dict:
 
     _CANONICAL_ADDRESS_MARKERS = ("号楼", "单元", "号院", "栋", "幢", "座", "楼", "室", "号", "弄", "里")
 
+    @lru_cache(maxsize=4096)
     def marker_phonetic_equal(fragment, marker):
         fragment = str(fragment or "").strip()
         marker = str(marker or "").strip()
@@ -238,6 +369,7 @@ def main(args: dict) -> dict:
             and all(chars_phonetic_equal(a, b) for a, b in zip(fragment, marker))
         )
 
+    @lru_cache(maxsize=4096)
     def normalize_address_marker_tokens(text):
         text = str(text or "").strip()
         if not text:
@@ -459,6 +591,7 @@ def main(args: dict) -> dict:
         number_text = normalize_address_number_compare_tokens(text)
         return bool(re.fullmatch(r"\d{3,6}", number_text))
 
+    @lru_cache(maxsize=8192)
     def _phonetic_substring_match(fragment, candidate):
         fragment_norm = normalize_text(fragment)
         candidate_norm = normalize_text(candidate)
@@ -604,22 +737,30 @@ def main(args: dict) -> dict:
 
         return candidate_span
 
-    def extract_spoken_address(raw_text, candidates):
+    def extract_spoken_address_parts(raw_text, candidates):
         compact_raw = re.sub(r"\s+", "", str(raw_text or "").strip())
         if not compact_raw:
-            return ""
+            return "", ""
 
         cleaned_raw = extract_effective_input(compact_raw)
 
-        structured_span = extract_by_address_structure(cleaned_raw)
+        candidate_noise_cleaned_raw = clean_candidate_supported_noise(cleaned_raw, candidates)
+
+        structured_span = extract_by_address_structure(candidate_noise_cleaned_raw)
         if structured_span:
-            return structured_span
+            return structured_span, candidate_noise_cleaned_raw
 
-        candidate_span = extract_by_candidate_overlap(cleaned_raw, candidates)
+        candidate_span = extract_by_candidate_overlap(candidate_noise_cleaned_raw, candidates)
         if candidate_span:
-            return expand_candidate_span_to_user_address_window(cleaned_raw, candidate_span)
+            return (
+                expand_candidate_span_to_user_address_window(candidate_noise_cleaned_raw, candidate_span),
+                candidate_noise_cleaned_raw,
+            )
 
-        return cleaned_raw
+        return candidate_noise_cleaned_raw, candidate_noise_cleaned_raw
+
+    def extract_spoken_address(raw_text, candidates):
+        return extract_spoken_address_parts(raw_text, candidates)[0]
 
 
 
@@ -692,6 +833,7 @@ def main(args: dict) -> dict:
                 values.append(value)
         return values
 
+    @lru_cache(maxsize=8192)
     def _find_phonetic_span_match(fragment, candidate):
         fragment_norm = normalize_text(fragment)
         candidate_norm = normalize_text(candidate)
@@ -796,6 +938,64 @@ def main(args: dict) -> dict:
             _add_match_term(terms, text)
 
         return terms
+
+    _RESIDENTIAL_PLACE_SUFFIXES = ("小区", "花园", "公寓", "家园", "苑", "府", "村")
+
+    def _extract_residential_place_terms(text):
+        text = normalize_address_marker_tokens(str(text or "").strip())
+        raw_named = extract_named_place_fragment(text)
+        stripped_named = strip_leading_admin_tokens(raw_named)
+        source_texts = [value for value in (raw_named, stripped_named) if value]
+        if not source_texts:
+            return []
+
+        suffix_pattern = "|".join(re.escape(suffix) for suffix in _RESIDENTIAL_PLACE_SUFFIXES)
+        terms = []
+        seen = set()
+        for source_text in source_texts:
+            for match in re.findall(fr"[\u4e00-\u9fa5A-Za-z0-9]{{2,20}}(?:{suffix_pattern})", source_text):
+                norm = normalize_text(match)
+                if norm and norm not in seen:
+                    seen.add(norm)
+                    terms.append(match)
+        return terms
+
+    def _candidate_supports_residential_place_term(term, candidate):
+        term = normalize_address_marker_tokens(str(term or "").strip())
+        candidate = normalize_address_marker_tokens(str(candidate or "").strip())
+        if not term or not candidate:
+            return False
+
+        term_norm = normalize_text(term)
+        candidate_norm = normalize_text(candidate)
+        if term_norm and candidate_norm and term_norm in candidate_norm:
+            return True
+
+        suffix = next((item for item in _RESIDENTIAL_PLACE_SUFFIXES if term.endswith(item)), "")
+        if not suffix or len(term) > len(candidate):
+            return False
+
+        for start in range(len(candidate) - len(term) + 1):
+            span = candidate[start:start + len(term)]
+            if not span.endswith(suffix):
+                continue
+            if all(chars_phonetic_equal(left, right) for left, right in zip(term, span)):
+                return True
+        return False
+
+    def _has_unsupported_residential_place_anchor(current_text, candidates):
+        terms = _extract_residential_place_terms(current_text)
+        if not terms:
+            return False
+
+        candidates = [str(candidate or "").strip() for candidate in candidates or [] if str(candidate or "").strip()]
+        if not candidates:
+            return True
+
+        return not any(
+            all(_candidate_supports_residential_place_term(term, candidate) for term in terms)
+            for candidate in candidates
+        )
 
     def _combine_address_parts(prev_text, curr_text):
         prev_text = normalize_address_marker_tokens(str(prev_text or "").strip())
@@ -960,7 +1160,10 @@ def main(args: dict) -> dict:
             f"当前用户已说范围“{user_scope}”仍匹配 {len(matched_candidates)} 条候选，"
             f"候选仍存在用户未提供的{missing_text}差异{detail_text}；"
             f"禁止补入任一候选中用户未说出的楼栋、单元、门牌或房间号，禁止输出 match_count=1。"
-            f"本轮必须输出 matched_index=-1, match_count={len(matched_candidates)}, is_completed=false；"
+            f"本轮必须输出 matched_index=-1, match_count=0, is_completed=false；"
+            "reason 必须根据 matched_address_fragment 覆盖候选最后两级的情况填写："
+            "只含倒数第二级输出 two，只含倒数第一级输出 one，两级都含输出 true，其他输出空字符串；"
+            "只覆盖 L5/前置路址范围时 reason 必须为空字符串；"
             f"matched_address_fragment 只能包含用户已说范围对应的候选支持片段，不能包含未说出的差异字段。"
         )
 
@@ -980,8 +1183,13 @@ def main(args: dict) -> dict:
         matched_idx, matched_candidate = matched_candidates[0]
         return (
             f"合并后的用户已说范围“{user_scope}”只匹配第 {matched_idx} 条候选“{matched_candidate}”；"
-            f"本轮必须输出 matched_index={matched_idx}, match_count=1, is_completed=false；"
-            f"matched_address_fragment 必须保留该合并范围对应的候选支持片段，不能降级为仅 clean_user_input。"
+            "这只表示候选范围唯一，仍必须按候选地址最后两个有效层级是否都被用户已说范围命中来决定 match_count。"
+            f"若未命中最后两级，仍输出 matched_index=-1, match_count=0, is_completed=false；"
+            "L7 内部楼栋号、单元号、门牌号、房号无论命中多少项，都只能算命中最后一级，不能替代倒数第二级；"
+            "reason 必须根据 matched_address_fragment 覆盖候选最后两级的情况填写："
+            "只含倒数第二级输出 two，只含倒数第一级输出 one，两级都含输出 true，其他输出空字符串；"
+            "只覆盖 L5/前置路址范围时 reason 必须为空字符串；"
+            f"matched_address_fragment 必须保留该合并范围对应的候选支持片段，不能丢失为仅 clean_user_input。"
         )
 
     def _char_pinyin_label(ch):
@@ -1102,17 +1310,19 @@ def main(args: dict) -> dict:
         kd_records = []
 
     raw_clean_input = clean_prefix(user_input)
-    clean_input = extract_spoken_address(user_input, kd_records)
-    last_unmatched_address = strip_non_merge_history(last_unmatched_address_raw)
-    last_unmatched_fragment = strip_non_merge_history(last_unmatched_fragment_raw)
+    clean_input, candidate_noise_clean_input = extract_spoken_address_parts(user_input, kd_records)
+    last_unmatched_address = strip_embedded_reason_field(strip_non_merge_history(last_unmatched_address_raw))
+    last_unmatched_fragment = strip_embedded_reason_field(strip_non_merge_history(last_unmatched_fragment_raw))
     llm_last_unmatched_address = last_unmatched_fragment or last_unmatched_address
-    merge_base_address = last_unmatched_fragment or last_unmatched_address
+    merge_base_address = last_unmatched_address or last_unmatched_fragment
     can_merge_with_previous = bool(merge_base_address) and not is_non_merge_history(last_unmatched_address_raw)
+    candidate_merge_base_address = last_unmatched_fragment or merge_base_address
 
-    possible_merged_input = merge_with_previous_address(merge_base_address if can_merge_with_previous else "", clean_input)
+    effective_merged_input = merge_with_previous_address(merge_base_address if can_merge_with_previous else "", clean_input)
+    possible_merged_input = merge_with_previous_address(candidate_merge_base_address if can_merge_with_previous else "", clean_input)
 
     candidate_backed_effective_input = (
-        _find_candidate_backed_merge(merge_base_address, clean_input, kd_records)
+        _find_candidate_backed_merge(candidate_merge_base_address, clean_input, kd_records)
         if can_merge_with_previous and clean_input
         else ""
     )
@@ -1124,7 +1334,13 @@ def main(args: dict) -> dict:
         and normalize_text(possible_merged_input) != normalize_text(clean_input)
     )
 
-    is_address_correction = bool(clean_input) and clean_input != raw_clean_input
+    is_candidate_noise_cleaning = bool(
+        clean_input
+        and raw_clean_input
+        and normalize_text(candidate_noise_clean_input) == normalize_text(clean_input)
+        and normalize_text(candidate_noise_clean_input) != normalize_text(raw_clean_input)
+    )
+    is_address_correction = bool(clean_input) and clean_input != raw_clean_input and not is_candidate_noise_cleaning
     prompt_state = "matching" if state == "completed" and is_address_correction else state
 
     context_parts = [f"[Context] state={prompt_state}"]
@@ -1139,8 +1355,8 @@ def main(args: dict) -> dict:
     if clean_input:
         context_parts.append(f"clean_user_input={clean_input}")
 
-    if last_unmatched_address:
-        context_parts.append(f"last_unmatched_address={last_unmatched_address}")
+    if llm_last_unmatched_address:
+        context_parts.append(f"last_unmatched_address={llm_last_unmatched_address}")
     if last_unmatched_fragment:
         context_parts.append(f"last_matched_address_fragment={last_unmatched_fragment}")
     if is_possible_supplement_fragment and possible_merged_input:
@@ -1215,9 +1431,11 @@ def main(args: dict) -> dict:
             "zh/z, ch/c, sh/s initials, and front/back nasal finals; different syllables must not be corrected."
         )
 
+    clean_candidate_records = [clean_rec for _record_str, clean_rec in raw_clean_recs]
+
     phonetic_mismatch_hint = _build_phonetic_mismatch_hint(
         display_scope,
-        [clean_rec for _record_str, clean_rec in raw_clean_recs],
+        clean_candidate_records,
     )
     if phonetic_mismatch_hint:
         context_text += f"\n[System Hint] {phonetic_mismatch_hint}"
@@ -1232,61 +1450,63 @@ def main(args: dict) -> dict:
             "若是纠正、冲突、全新地址或无关内容，则不要强行合并。"
             "matched_address_fragment 只能输出模型判定后的用户已说且候选支持范围；"
             "如果判定为补充上一轮地址，matched_address_fragment 必须包含上一轮片段和本轮片段，"
-            "不能只输出 clean_user_input 本轮片段。"
+            "必须输出两者在同一候选中的标准合并结果，不能只输出 clean_user_input 本轮片段。"
             "禁止补入候选中用户未说出的路名、楼栋、单元、门牌或房间号。"
         )
 
-    candidate_supported_fragment = _candidate_supported_user_fragment(
-        display_scope,
-        [clean_rec for _record_str, clean_rec in raw_clean_recs],
-    )
-    if (
-        candidate_supported_fragment
-        and display_scope
-        and normalize_text(candidate_supported_fragment) != normalize_text(display_scope)
-    ):
-        context_text += (
-            f"\n[System Hint] 用户输入“{display_scope}”中，候选支持的地址片段是“{candidate_supported_fragment}”；"
-            "候选不支持的前缀、后缀或口语噪声不能写入 matched_address_fragment，"
-            "也不能因为整句不完全被候选支持就直接判定无匹配。"
-            f"若该支持片段能唯一命中候选，matched_address_fragment 应输出候选原文中的对应片段“{candidate_supported_fragment}”。"
-        )
-
     if previous_context_fragment:
-        combined_context_scope = (
-            _find_candidate_backed_merge(
-                previous_context_fragment,
-                display_scope,
-                [clean_rec for _record_str, clean_rec in raw_clean_recs],
+        has_unsupported_residential_place_anchor = _has_unsupported_residential_place_anchor(
+            display_scope,
+            clean_candidate_records,
+        )
+        if has_unsupported_residential_place_anchor:
+            context_text += (
+                f"\n[System Hint] 本轮地点主体校验：current_place_anchor={json.dumps(display_scope, ensure_ascii=False)}；"
+                "anchor_type=住宅/村镇主体；candidate_supports_current_anchor=false。"
+                "共享前缀、拼音相近或上一轮门牌细节唯一，都不能视为候选支持当前地点主体。"
+                "本轮应按地点主体无候选支持处理：matched_index=-1, match_count=0, is_completed=false；"
+                "matched_address_fragment 应按提示词中无候选支持或上一轮结果的规则处理。"
             )
-            or _combine_address_parts(previous_context_fragment, display_scope)
-        )
-        unique_supplement_hint = _build_unique_candidate_hint(
-            combined_context_scope,
-            [clean_rec for _record_str, clean_rec in raw_clean_recs],
-        )
-        if unique_supplement_hint:
-            context_text += f"\n[System Hint] {unique_supplement_hint}"
         else:
-            ambiguity_hint = _build_ambiguous_candidate_hint(
-                combined_context_scope,
-                [clean_rec for _record_str, clean_rec in raw_clean_recs],
-            )
-            if ambiguity_hint:
-                context_text += f"\n[System Hint] {ambiguity_hint}"
-            else:
-                context_text += (
-                    "\n[System Hint] 如果你判断本轮是在补充上一轮地址，"
-                    "请先用合并后的用户已说范围重新筛选 candidates_info："
-                    "若能缩到唯一候选，必须输出 match_count=1；"
-                    "只有合并后仍匹配多条候选时，才输出 matched_index=-1、match_count=可匹配候选数量。"
-                    "matched_address_fragment 应保留合并后的用户已说且候选支持范围，"
-                    "不得降级为仅 clean_user_input。"
+            combined_context_scope = (
+                _find_candidate_backed_merge(
+                    previous_context_fragment,
+                    display_scope,
+                    clean_candidate_records,
                 )
+                or _combine_address_parts(previous_context_fragment, display_scope)
+            )
+            unique_supplement_hint = _build_unique_candidate_hint(
+                combined_context_scope,
+                clean_candidate_records,
+            )
+            if unique_supplement_hint:
+                context_text += f"\n[System Hint] {unique_supplement_hint}"
+            else:
+                ambiguity_hint = _build_ambiguous_candidate_hint(
+                    combined_context_scope,
+                    clean_candidate_records,
+                )
+                if ambiguity_hint:
+                    context_text += f"\n[System Hint] {ambiguity_hint}"
+                else:
+                    context_text += (
+                        "\n[System Hint] 如果你判断本轮是在补充上一轮地址，"
+                        "请先用合并后的用户已说范围重新筛选 candidates_info："
+                        "若能缩到唯一候选，仍必须继续校验是否命中该候选最后两个有效层级，只有命中最后两级才输出 match_count=1；"
+                        "合并后仍匹配多条候选，或未命中最后两级时，输出 matched_index=-1、match_count=0。"
+                        "L7 内部楼栋号、单元号、门牌号、房号无论命中多少项，都只能算命中最后一级，不能替代倒数第二级。"
+                        "reason 必须根据 matched_address_fragment 覆盖候选最后两级的情况填写："
+                        "只含倒数第二级输出 two，只含倒数第一级输出 one，两级都含输出 true，其他输出空字符串；"
+                        "只覆盖 L5/前置路址范围时 reason 必须为空字符串。"
+                        "matched_address_fragment 应保留合并后的用户已说且候选支持范围，"
+                        "不得丢失为仅 clean_user_input；例如上一轮“100号楼1单元302室”、本轮“江阳化工厂”、"
+                        "候选支持“江阳化工厂100号楼1单元302室”时，matched_address_fragment 必须输出“江阳化工厂100号楼1单元302室”。"
+                    )
     else:
         ambiguity_hint = _build_ambiguous_candidate_hint(
             display_scope,
-            [clean_rec for _record_str, clean_rec in raw_clean_recs],
+            clean_candidate_records,
         )
         if ambiguity_hint:
             context_text += f"\n[System Hint] {ambiguity_hint}"
@@ -1340,7 +1560,7 @@ def main(args: dict) -> dict:
     if re.search(r"\d+\s*号\s*门", user_input):
         semantic_hints.append("用户输入中的“数字号门”表示门或入口位置，不表示楼栋号，不能与“数字#”“数字号楼”“数字栋”互认。")
     if re.search(r"[一二两三四五六七八九十百千万零〇]+(?:楼|号楼|栋|幢|座|单元|室)|单元[一二两三四五六七八九十百千万零〇]{2,6}", user_input):
-        semantic_hints.append("用户输入中的中文数字地址编号必须在用户口述范围内保留原片段，并按分段等价参与匹配：例如“一百楼一单元三零二”中“一百”可匹配候选的“100”，“一”可匹配“1”，“三零二”可匹配“302”；禁止把“一百”裁掉只剩“楼”，也不能仅凭该规则补入用户未说出的地点层级。若最终输出 match_count=1 且 matched_index>=0，matched_address_fragment 仍必须使用候选地址中的标准原文片段，不能输出用户口述中文数字片段。")
+        semantic_hints.append("用户输入中的中文数字地址编号必须在用户口述范围内保留原片段，并按分段等价参与匹配：例如“一百楼一单元三零二”中“一百”可匹配候选的“100”，“一”可匹配“1”，“三零二”可匹配“302”；禁止把“一百”裁掉只剩“楼”，也不能仅凭该规则补入用户未说出的地点层级。若用户只说楼栋/单元/房号等 L7 详细地址，即使命中多个 L7 元素，也只能算“只命中最后一级”，不能输出 match_count=1；禁止把“100号楼”拆成倒数第二级、把“1单元302室”拆成最后一级；matched_address_fragment 仍必须使用候选地址中的标准原文片段，不能输出用户口述中文数字片段。")
     if semantic_hints:
         context_text += f"\n[System Hint] {' '.join(semantic_hints)}"
 
@@ -1360,6 +1580,6 @@ def main(args: dict) -> dict:
         "history_user_message": history_msg,
         "clean_user_input": clean_input,
         "llm_user_input": clean_input,
-        "effective_match_input": possible_merged_input or clean_input,
+        "effective_match_input": effective_merged_input or clean_input,
         "possible_merged_input": possible_merged_input if is_possible_supplement_fragment else ""
     }

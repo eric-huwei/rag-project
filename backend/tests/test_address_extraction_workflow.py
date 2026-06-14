@@ -3538,6 +3538,67 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
         self.assertIn("User: 1201", result["user_message"])
         self.assertNotIn("1201201", result["user_message"])
 
+    def test_candidate_noise_cleaning_trims_only_non_address_wrappers(self) -> None:
+        cases = (
+            (
+                "真爱桃园华府",
+                ["公园路桃园华府30号楼"],
+                "桃园华府",
+            ),
+            (
+                "宽地阔的公园路",
+                ["公园路桃园华府30号楼"],
+                "公园路",
+            ),
+            (
+                "乱七八糟公园路",
+                ["公园路桃园华府30号楼"],
+                "公园路",
+            ),
+            (
+                "100栋302",
+                ["移机费50元山西太原市尖草坪区江阳商业街江阳化工厂100号楼1单元302室"],
+                "100栋302",
+            ),
+            (
+                "桃园华府北门",
+                ["公园路桃园华府30号楼"],
+                "桃园华府北门",
+            ),
+            (
+                "桃园华府的公园路",
+                ["公园路桃园华府30号楼"],
+                "桃园华府的公园路",
+            ),
+            (
+                "北门的公园路",
+                ["公园路桃园华府30号楼"],
+                "北门的公园路",
+            ),
+        )
+
+        for label, build_llm_message_main in (
+            ("workflow-json", _load_build_llm_message_main()),
+            ("source-file", _load_build_llm_message_file_main()),
+        ):
+            for user_input, records, expected in cases:
+                with self.subTest(label=label, user_input=user_input):
+                    result = build_llm_message_main(
+                        {
+                            "userInput": user_input,
+                            "state": "matching",
+                            "matchedIndex": -1,
+                            "last_unmatched_address": "",
+                            "similar_no_match_count": 0,
+                            "kdRecords": records,
+                        }
+                    )
+
+                    self.assertEqual(result["clean_user_input"], expected)
+                    self.assertEqual(result["effective_match_input"], expected)
+                    self.assertIn(f"User: {expected}", result["user_message"])
+                    self.assertNotIn("用户正在纠正上一条地址", result["user_message"])
+
     def test_chinese_numeric_detail_preserved_on_first_candidate_overlap_cleaning(self) -> None:
         payload = {
             "userInput": "一百楼一单元三零二",
@@ -3618,6 +3679,71 @@ class AddressExtractionWorkflowTests(unittest.TestCase):
                 self.assertIn("last_unmatched_address=100号楼1单元302室", user_message)
                 self.assertIn("last_matched_address_fragment=100号楼1单元302室", user_message)
                 self.assertNotIn("last_unmatched_address=一百楼一单元三零二", user_message)
+
+    def test_unsupported_residential_anchor_after_denial_does_not_reuse_previous_fragment(self) -> None:
+        postprocess_main = _load_address_postprocess_main()
+
+        result = postprocess_main(
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "matched_address_fragment": "一百楼一单元三零二江阳化工厂",
+                "reason": "one",
+                "reply": "",
+                "is_extract_failed": False,
+            },
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            state="matching",
+            matched_index=-1,
+            clean_user_input="江阳小区",
+            last_unmatched_address="一百楼一单元三零二江阳化工厂",
+            last_unmatched_fragment="一百楼一单元三零二江阳化工厂",
+            similar_no_match_count=1,
+            address_list=[
+                "移机费50元山西太原市尖草坪区卧虎山路柏翠苑1号楼5单元202室",
+                "山西太原市尖草坪区卧虎山路柏翠苑4号楼2单元102室",
+                "移机费50元山西太原市尖草坪区江阳商业街江阳化工厂100号楼1单元302室",
+            ],
+        )
+
+        output = result["llm_result"]
+        self.assertEqual(output["matched_index"], -1)
+        self.assertEqual(output["match_count"], 0)
+        self.assertFalse(output["is_completed"])
+        self.assertEqual(output["matched_address_fragment"], "")
+        self.assertEqual(output["reason"], "")
+        self.assertEqual(result["next_last_unmatched_fragment"], "")
+
+    def test_unsupported_residential_anchor_hint_after_previous_context_does_not_request_previous_fallback(self) -> None:
+        payload = {
+            "userInput": "江阳小区",
+            "state": "matching",
+            "matchedIndex": -1,
+            "last_unmatched_address": "一百楼一单元三零二江阳化工厂",
+            "last_unmatched_fragment": "一百楼一单元三零二江阳化工厂",
+            "similar_no_match_count": 1,
+            "kdRecords": [
+                "移机费50元山西太原市尖草坪区卧虎山路柏翠苑1号楼5单元202室",
+                "山西太原市尖草坪区卧虎山路柏翠苑4号楼2单元102室",
+                "移机费50元山西太原市尖草坪区江阳商业街江阳化工厂100号楼1单元302室",
+            ],
+        }
+
+        for label, build_llm_message_main in (
+            ("workflow-json", _load_build_llm_message_main()),
+            ("source-file", _load_build_llm_message_file_main()),
+        ):
+            with self.subTest(label=label):
+                result = build_llm_message_main(payload)
+                user_message = result["user_message"]
+
+                self.assertIn("本轮地点主体校验", user_message)
+                self.assertIn("candidate_supports_current_anchor=false", user_message)
+                self.assertIn("matched_address_fragment 应按提示词中无候选支持或上一轮结果的规则处理", user_message)
+                self.assertNotIn("allowed_matched_address_fragments", user_message)
+                self.assertNotIn("候选支持片段白名单", user_message)
+                self.assertNotIn('禁止输出 matched_address_fragment="江阳小区"', user_message)
 
     def test_room_then_homophone_town_records_candidate_corrected_text(self) -> None:
         postprocess_main = _load_address_postprocess_main()
