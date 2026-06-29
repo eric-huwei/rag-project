@@ -1192,6 +1192,123 @@ def main(args: dict) -> dict:
             f"matched_address_fragment 必须保留该合并范围对应的候选支持片段，不能丢失为仅 clean_user_input。"
         )
 
+    def _extract_place_anchor_for_last_level_hint(text):
+        fragment = strip_leading_admin_tokens(extract_named_place_fragment(text))
+        fragment = normalize_address_marker_tokens(fragment)
+        fragment_norm = normalize_text(fragment)
+        if len(fragment_norm) < 4 or is_weak_area_fragment(fragment):
+            return ""
+        return fragment
+
+    def _extract_detail_numbers(text):
+        text = normalize_address_number_compare_tokens(
+            normalize_address_marker_tokens(str(text or "").strip())
+        )
+        return re.findall(r"\d+", text)
+
+    def _first_detail_number(text):
+        numbers = _extract_detail_numbers(text)
+        return numbers[0] if numbers else ""
+
+    def _candidate_level_hint_evidence(user_scope, candidate, place_anchor):
+        candidate = normalize_address_marker_tokens(str(candidate or "").strip())
+        if not candidate:
+            return None
+
+        place_start = candidate.find(place_anchor)
+        if place_start < 0:
+            return None
+
+        user_numbers = set(_extract_detail_numbers(user_scope))
+        if not user_numbers:
+            return None
+
+        building = _extract_building_name(candidate)
+        unit = _extract_unit_name(candidate)
+        room = _extract_room_name(candidate)
+        house = _extract_house_name(candidate)
+
+        required_parts = []
+        for part in (building, unit, house, room):
+            if not part:
+                continue
+            number = _first_detail_number(part)
+            if not number or number not in user_numbers:
+                return None
+            required_parts.append(part)
+
+        if not required_parts:
+            return None
+
+        has_terminal_anchor = bool(
+            (room and _first_detail_number(room) in user_numbers)
+            or (house and _first_detail_number(house) in user_numbers)
+        )
+        if not has_terminal_anchor:
+            return None
+
+        place_end = place_start + len(place_anchor)
+        positions = []
+        for part in required_parts:
+            part_start = candidate.find(part, place_end)
+            if part_start < 0:
+                continue
+            positions.append((part_start, part_start + len(part)))
+
+        standard_fragment = ""
+        if positions:
+            detail_start = min(start for start, _end in positions)
+            detail_end = max(end for _start, end in positions)
+            gap = candidate[place_end:detail_start]
+            if not normalize_text(gap):
+                standard_fragment = candidate[place_start:detail_end]
+
+        return {
+            "candidate": candidate,
+            "standard_fragment": standard_fragment,
+            "required_parts": required_parts,
+        }
+
+    def _build_current_unique_last_level_hint(user_scope, candidates):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        if not user_scope or not isinstance(candidates, list) or not candidates:
+            return ""
+        if not has_building_or_room(user_scope):
+            return ""
+
+        place_anchor = _extract_place_anchor_for_last_level_hint(user_scope)
+        if not place_anchor:
+            return ""
+
+        matched_candidates = []
+        for idx, candidate in enumerate(candidates):
+            evidence = _candidate_level_hint_evidence(user_scope, candidate, place_anchor)
+            if evidence:
+                matched_candidates.append((idx, evidence))
+
+        if len(matched_candidates) != 1:
+            return ""
+
+        matched_idx, evidence = matched_candidates[0]
+        detail_text = "、".join(dict.fromkeys(evidence["required_parts"]))
+        standard_fragment = evidence["standard_fragment"]
+        standard_fragment_hint = (
+            f"候选中该用户已说范围的标准片段可写为“{standard_fragment}”；"
+            if standard_fragment
+            else ""
+        )
+
+        return (
+            f"当前 clean_user_input 已同时说出候选第 {matched_idx} 条支持的 L6 地点主体"
+            f"“{place_anchor}”和 L7 关键锚点“{detail_text}”；"
+            f"{standard_fragment_hint}"
+            "这不是只命中 L7。若 matched_address_fragment 同时包含该 L6 主体和这些 L7 锚点，"
+            f"应判定覆盖候选最后两级 L6+L7，输出 reason=\"true\"、matched_index={matched_idx}、match_count=1；"
+            "不要把包含 L6 主体的片段误判为 reason=\"one\"。"
+            "L7 内“单元/栋/幢/楼/座/号”等弱结构词错位或多余，"
+            "只要候选楼栋/单元/房号关键数字锚点已覆盖，就不能把 reason 从 true 降为 one。"
+        )
+
     def _char_pinyin_label(ch):
         ch = str(ch or "").strip()
         if not ch:
@@ -1504,12 +1621,19 @@ def main(args: dict) -> dict:
                         "候选支持“江阳化工厂100号楼1单元302室”时，matched_address_fragment 必须输出“江阳化工厂100号楼1单元302室”。"
                     )
     else:
-        ambiguity_hint = _build_ambiguous_candidate_hint(
+        current_unique_level_hint = _build_current_unique_last_level_hint(
             display_scope,
             clean_candidate_records,
         )
-        if ambiguity_hint:
-            context_text += f"\n[System Hint] {ambiguity_hint}"
+        if current_unique_level_hint:
+            context_text += f"\n[System Hint] {current_unique_level_hint}"
+        else:
+            ambiguity_hint = _build_ambiguous_candidate_hint(
+                display_scope,
+                clean_candidate_records,
+            )
+            if ambiguity_hint:
+                context_text += f"\n[System Hint] {ambiguity_hint}"
 
     if is_address_correction:
         context_text += f"\n[System Hint] 用户正在纠正上一条地址，本轮有效地址片段更可能是: {clean_input}。如当前状态不是matching，请按新的匹配请求处理。"

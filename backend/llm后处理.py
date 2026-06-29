@@ -81,15 +81,26 @@ def main(
         and previous_fragment
         and matched_address_fragment == previous_fragment
     )
-    reply_current_input = previous_address if reused_previous_fragment and previous_address else current_input
+    if reused_previous_fragment and previous_address:
+        reply_current_input = previous_address
+        reply_previous_address = ""
+    else:
+        reply_current_input = current_input
+        reply_previous_address = previous_address
     reply_display_address = _build_reply_display_address(
         current_input=reply_current_input,
-        previous_address="",
+        previous_address=reply_previous_address,
         previous_fragment="",
         matched_address_fragment=matched_address_fragment,
         reason=reason,
         address_list=address_list,
     )
+
+    if reason == "one" and matched_address_fragment:
+        fallback_index = _infer_unique_candidate_by_non_admin_tail(matched_address_fragment, address_list)
+        if fallback_index >= 0:
+            reason = "true"
+            model_matched_index = fallback_index
 
     # Step 1: LLM result 的状态字段只由 reason 决定。
     final_match_count, final_matched_index, final_is_completed, final_is_extract_failed = (
@@ -162,6 +173,138 @@ def _build_result_status_by_reason(reason: str, model_matched_index: int, fallba
         final_matched_index = model_matched_index if model_matched_index >= 0 else fallback_matched_index
         return 1, final_matched_index, False, False
     return 0, -1, False, False
+
+
+def _infer_unique_candidate_by_non_admin_tail(matched_address_fragment: str, address_list: list) -> int:
+    fragment_variants = _non_admin_tail_norm_variants(matched_address_fragment, strip_subdistrict=False)
+    if not fragment_variants or not _has_non_admin_place_anchor(matched_address_fragment):
+        return -1
+
+    matched_indexes = []
+    for index, candidate in enumerate(address_list):
+        candidate_variants = _non_admin_tail_norm_variants(candidate, strip_subdistrict=True)
+        if any(
+            _candidate_tail_matches_fragment(candidate_norm, fragment_norm)
+            for fragment_norm in fragment_variants
+            for candidate_norm in candidate_variants
+        ):
+            matched_indexes.append(index)
+
+    return matched_indexes[0] if len(matched_indexes) == 1 else -1
+
+
+def _candidate_tail_matches_fragment(candidate_norm: str, fragment_norm: str) -> bool:
+    if candidate_norm == fragment_norm or candidate_norm.endswith(fragment_norm):
+        return True
+    return _fragment_extends_candidate_tail(fragment_norm, candidate_norm)
+
+
+def _fragment_extends_candidate_tail(fragment_norm: str, candidate_norm: str) -> bool:
+    if not fragment_norm or not candidate_norm:
+        return False
+
+    for end in range(len(fragment_norm) - 1, 1, -1):
+        supported_prefix = fragment_norm[:end]
+        extra_suffix = fragment_norm[end:]
+        if not candidate_norm.endswith(supported_prefix):
+            continue
+        if not _looks_like_more_specific_detail_suffix(extra_suffix):
+            continue
+        if not _has_non_admin_place_anchor(supported_prefix):
+            continue
+        return True
+    return False
+
+
+def _looks_like_more_specific_detail_suffix(text: str) -> bool:
+    text = _to_str(text)
+    if not text:
+        return False
+
+    cn_num = _CN_ADDRESS_NUMBER_CHARS
+    numeric = fr"(?:\d+|[{cn_num}]+)"
+    numeric_or_seat = fr"(?:{numeric}|[a-z]\d*)"
+    bare_room = fr"(?:\d{{3,6}}|[{cn_num}]{{3,6}})"
+    detail_part = fr"(?:{numeric_or_seat}(?:栋|幢|座|楼|单元|室)|{bare_room})"
+    return bool(re.fullmatch(fr"(?:{detail_part})+", text))
+
+
+def _non_admin_tail_norm_variants(text: str, strip_subdistrict: bool) -> set[str]:
+    tail = _strip_leading_admin_tokens_for_tail_match(text, strip_subdistrict=strip_subdistrict)
+    if not tail:
+        return set()
+
+    variants = {
+        tail,
+        _fold_subdistrict_street_suffix(tail),
+        _drop_repeated_subdistrict_street(tail),
+    }
+    return {norm for norm in (_normalize_text(value) for value in variants) if norm}
+
+
+def _strip_leading_admin_tokens_for_tail_match(text: str, strip_subdistrict: bool) -> str:
+    text = _normalize_address_marker_tokens(text)
+    patterns = [
+        r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:自治区|特别行政区|省)",
+        r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?市",
+        r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:区|县|旗)",
+        r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?(?:镇|乡)",
+    ]
+    if strip_subdistrict:
+        patterns.append(r"^[\u4e00-\u9fa5A-Za-z0-9]{2,12}?街道")
+
+    changed = True
+    while changed and text:
+        changed = False
+        for pattern in patterns:
+            match = re.match(pattern, text)
+            if match:
+                text = text[match.end():]
+                changed = True
+                break
+    return text.strip()
+
+
+def _fold_subdistrict_street_suffix(text: str) -> str:
+    text = _to_str(text)
+    if not text:
+        return ""
+    cn_num = _CN_ADDRESS_NUMBER_CHARS
+    return re.sub(
+        fr"([\u4e00-\u9fa5A-Za-z0-9]{{1,20}})街道(?=(?:\d+|[{cn_num}]+)(?:号|号院|弄|里))",
+        r"\1街",
+        text,
+    )
+
+
+def _drop_repeated_subdistrict_street(text: str) -> str:
+    text = _to_str(text)
+    match = re.match(r"^([\u4e00-\u9fa5A-Za-z0-9]{1,20}?)街道(.+)$", text)
+    if not match:
+        return text
+    root, rest = match.groups()
+    return rest if rest.startswith(f"{root}街") else text
+
+
+def _has_non_admin_place_anchor(text: str) -> bool:
+    tail = _strip_leading_admin_tokens_for_tail_match(text, strip_subdistrict=False)
+    anchor = _extract_named_place_fragment(_prefix_before_first_detail_scope(tail))
+    anchor = _strip_leading_admin_tokens_for_tail_match(anchor, strip_subdistrict=False)
+    anchor = _fold_subdistrict_street_suffix(anchor)
+    anchor_norm = _normalize_text(anchor)
+    return bool(len(anchor_norm) >= 2 and not _is_weak_area_fragment(anchor))
+
+
+def _prefix_before_first_detail_scope(text: str) -> str:
+    text = _normalize_address_marker_tokens(text)
+    if not text:
+        return ""
+    cn_num = _CN_ADDRESS_NUMBER_CHARS
+    match = re.search(
+        fr"(?:\d+|[{cn_num}]+|[A-Za-z]\d*)(?:栋|幢|座|号楼|楼|单元|室|号院|号|弄|里)|(?<!\d)\d{{3,6}}(?!\d)",
+        text,
+    )
+    return text[:match.start()].strip() if match else text.strip()
 
 
 def _calculate_repeat_failure(
@@ -400,6 +543,11 @@ def _combine_user_spoken_parts(previous_scope: str, current_input: str) -> str:
         return previous_scope
     if not previous_scope:
         return current_input
+
+    if current_input == previous_scope or previous_scope in current_input:
+        return current_input
+    if current_input in previous_scope:
+        return previous_scope
 
     previous_norm = _normalize_text(previous_scope)
     current_norm = _normalize_text(current_input)
