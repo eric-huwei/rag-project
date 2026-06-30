@@ -1112,6 +1112,92 @@ def main(args: dict) -> dict:
             return False
         return True
 
+    def _find_ordered_candidate_term_window(terms, candidate):
+        candidate_norm = normalize_text(candidate)
+        if not terms or not candidate_norm:
+            return None
+
+        spans = []
+        search_start = 0
+        for value, norm in terms:
+            if not norm:
+                continue
+            found = None
+            if len(norm) > len(candidate_norm):
+                return None
+            for start in range(search_start, len(candidate_norm) - len(norm) + 1):
+                candidate_span = candidate_norm[start:start + len(norm)]
+                if all(chars_phonetic_equal(a, b) for a, b in zip(norm, candidate_span)):
+                    found = (value, candidate_span, start, start + len(norm))
+                    break
+            if not found:
+                return None
+            spans.append(found)
+            search_start = found[3]
+
+        if not spans:
+            return None
+        return spans[0][2], spans[-1][3], spans
+
+    def _extend_detail_window_end(candidate_norm, window_end):
+        while window_end < len(candidate_norm) and candidate_norm[window_end] in "号室":
+            window_end += 1
+        return window_end
+
+    def _build_ordered_candidate_anchor_span_hint(user_scope, candidates):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        if not user_scope or not isinstance(candidates, list) or not candidates:
+            return ""
+
+        terms = _extract_candidate_backed_terms(user_scope)
+        if len(terms) < 2:
+            return ""
+
+        matched_windows = []
+        for idx, candidate in enumerate(candidates):
+            candidate_text = normalize_address_marker_tokens(str(candidate or "").strip())
+            candidate_norm = normalize_text(candidate_text)
+            window = _find_ordered_candidate_term_window(terms, candidate_text)
+            if not window:
+                continue
+            window_start, window_end, spans = window
+            window_end = _extend_detail_window_end(candidate_norm, window_end)
+            if window_start < 0 or window_end <= window_start:
+                continue
+            standard_fragment = candidate_norm[window_start:window_end]
+            matched_windows.append((idx, standard_fragment, spans))
+
+        if len(matched_windows) != 1:
+            return ""
+
+        matched_idx, standard_fragment, spans = matched_windows[0]
+        anchor_text = "、".join(dict.fromkeys(value for value, _span, _start, _end in spans))
+        return (
+            f"当前 clean_user_input 的关键地址锚点“{anchor_text}”按顺序落在第 {matched_idx} 条候选中；"
+            f"matched_address_fragment 可使用候选从第一个锚点到最后一个锚点之间的连续标准片段“{standard_fragment}”，"
+            "允许补全锚点之间省略的同一层级或 L7 结构成分（如单元/号/室），"
+            "但禁止补入该窗口外的省/市/区/街道/路名/小区/主体等候选独有内容。"
+        )
+
+    def _build_no_candidate_anchor_hint(user_scope, candidates):
+        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
+        if not user_scope or not isinstance(candidates, list) or not candidates:
+            return ""
+
+        terms = _extract_candidate_backed_terms(user_scope)
+        for candidate in candidates:
+            candidate_text = str(candidate or "").strip()
+            if _candidate_supports_user_scope(user_scope, candidate_text):
+                return ""
+            if terms and _find_ordered_candidate_term_window(terms, candidate_text):
+                return ""
+
+        return (
+            f"当前 clean_user_input“{user_scope}”没有任何可锚定到 candidates_info 的地址成分；"
+            "不能把它写入 matched_address_fragment，也不能仅凭拼音把不同音节纠正为候选地址。"
+            "若没有上一轮已被候选支持的片段，matched_address_fragment 必须为 \"\"。"
+        )
+
     def _build_ambiguous_candidate_hint(user_scope, candidates):
         user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
         if not user_scope or not isinstance(candidates, list) or len(candidates) < 2:
@@ -1537,12 +1623,14 @@ def main(args: dict) -> dict:
     if display_scope:
         context_text += (
             f"\n[Display Constraint] If reply starts with the recorded-address prefix, "
-            f"the recorded address must only use clean_user_input: {display_scope}, "
+            f"the recorded address must be limited to candidate-supported user-spoken scope from clean_user_input: {display_scope}, "
             "unless the model first judges clean_user_input is a supplement to "
             "last_matched_address_fragment/last_unmatched_address; in that supplement case, "
             "the recorded address may use the combined user-spoken scope made only from those fields. "
-            "Use candidates_info only for matching, same-scope homophone correction, and missing-level judgment. "
-            "Do not add or append candidate-only province/city/district/town/road/community/building/unit/room text into reply. "
+            "Use candidates_info only for matching, same-scope homophone correction, ordered address-anchor completion, and missing-level judgment. "
+            "If multiple spoken anchors map in order to one candidate, the recorded fragment may use the candidate standard text between the first and last anchor, "
+            "but must not add candidate-only province/city/district/town/road/community or any text outside that anchored span. "
+            "If clean_user_input has no candidate-backed anchor, do not record it as matched_address_fragment. "
             "A correction may only replace an already-spoken span with similar-length same-scope text. "
             "Pinyin correction is limited to identical pronunciation, polyphone pronunciation overlap, "
             "zh/z, ch/c, sh/s initials, and front/back nasal finals; different syllables must not be corrected."
@@ -1556,6 +1644,20 @@ def main(args: dict) -> dict:
     )
     if phonetic_mismatch_hint:
         context_text += f"\n[System Hint] {phonetic_mismatch_hint}"
+
+    ordered_anchor_span_hint = _build_ordered_candidate_anchor_span_hint(
+        display_scope,
+        clean_candidate_records,
+    )
+    if ordered_anchor_span_hint:
+        context_text += f"\n[System Hint] {ordered_anchor_span_hint}"
+
+    no_candidate_anchor_hint = _build_no_candidate_anchor_hint(
+        display_scope,
+        clean_candidate_records,
+    )
+    if no_candidate_anchor_hint:
+        context_text += f"\n[System Hint] {no_candidate_anchor_hint}"
 
     previous_context_fragment = last_unmatched_fragment or last_unmatched_address
     if clean_input and previous_context_fragment:
