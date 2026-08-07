@@ -310,6 +310,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
 
         self.assertEqual(result["llm_result"]["matched_index"], -1)
         self.assertEqual(result["llm_result"]["match_count"], 0)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
         self.assertEqual(result["llm_result"]["reply"], "请您提供详细的地址信息")
 
     def test_confirming_affirmation_completes_even_if_model_returns_reason_true(self) -> None:
@@ -1089,6 +1090,85 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["matched_address_fragment"], "")
         self.assertEqual(result["next_last_unmatched_address"], "")
         self.assertEqual(result["next_last_unmatched_fragment"], "")
+        self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_empty_fragments_increment_repeat_count_even_when_not_meaningless(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            last_unmatched_fragment="",
+            matched_index=0,
+            state="",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "matched_address_fragment": "",
+                "reason": "",
+            },
+            clean_user_input="\u5409\u6797\u7701\u957f\u6625\u5e02\u5357\u5173\u533a\u4eba\u6c11\u5927\u8857\u4e2d\u6bb5",
+            last_unmatched_address="",
+            similar_no_match_count=1,
+            address_list=["\u7ea2\u82f9\u679c\u5bb6\u56ed"],
+        )
+
+        self.assertFalse(result["llm_result"]["is_extract_failed"])
+        self.assertEqual(result["llm_result"]["matched_address_fragment"], "")
+        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(result["next_last_unmatched_fragment"], "")
+        self.assertEqual(result["next_similar_no_match_count"], 1)
+
+    def test_repeated_empty_fragments_trigger_extract_failed(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            last_unmatched_fragment="",
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": True, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "matched_address_fragment": "",
+                "reason": "",
+            },
+            clean_user_input="\u968f\u4fbf\u4e00\u53e5",
+            last_unmatched_address="",
+            similar_no_match_count=1,
+            address_list=[],
+        )
+
+        self.assertTrue(result["llm_result"]["is_extract_failed"])
+        self.assertEqual(result["llm_result"]["matched_address_fragment"], "")
+        self.assertEqual(result["next_last_unmatched_address"], "")
+        self.assertEqual(result["next_last_unmatched_fragment"], "")
+        self.assertEqual(result["next_similar_no_match_count"], 0)
+
+    def test_stale_threshold_repeat_count_restarts_at_one(self) -> None:
+        main = _load_llm_postprocess_main()
+
+        result = main(
+            last_unmatched_fragment="",
+            matched_index=-1,
+            state="matching",
+            meaningless_result={"is_meaningless": False, "reply": ""},
+            llm_result={
+                "matched_index": -1,
+                "match_count": 0,
+                "is_completed": False,
+                "matched_address_fragment": "",
+                "reason": "",
+            },
+            clean_user_input="\u5409\u6797\u7701\u957f\u6625\u5e02\u5357\u5173\u533a\u4eba\u6c11\u5927\u8857\u4e2d\u6bb5",
+            last_unmatched_address="",
+            similar_no_match_count=2,
+            address_list=["\u7ea2\u82f9\u679c\u5bb6\u56ed"],
+        )
+
+        self.assertFalse(result["llm_result"]["is_extract_failed"])
+        self.assertEqual(result["next_similar_no_match_count"], 1)
 
     def test_repeated_matched_fragment_fails_even_when_followup_can_be_built(self) -> None:
         main = _load_llm_postprocess_main()
@@ -1120,7 +1200,7 @@ class LlmPostprocessFileTests(unittest.TestCase):
         self.assertEqual(result["llm_result"]["reply"], "")
         self.assertEqual(result["next_last_unmatched_address"], "")
         self.assertEqual(result["next_last_unmatched_fragment"], "")
-        self.assertEqual(result["next_similar_no_match_count"], 2)
+        self.assertEqual(result["next_similar_no_match_count"], 0)
 
     def test_reused_previous_fragment_infers_previous_reason(self) -> None:
         main = _load_llm_postprocess_main()

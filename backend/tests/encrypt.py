@@ -6,7 +6,7 @@ import base64
 public_key = """MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCtevC4d5Zfc7neuViko71CY6mM8Bn/1dcNw/bMlyu1pmopWSbkeJ5a+YXNlReLDnMS8WWcCRXX75yq+LfrTmJsgCAjhSCzxYbWhLDrTxmzr52kLRpw7RaBD90kZ2UEjBO+ZGowEjS0F9KLbuH+TqH/ttGP4D1EwaPl1tjHznOO+wIDAQAB"""
 
 # 你要加密的明文
-plain_text = '{"messages":"上海市浦东区福山路三百八十号","callId":"302605271639149209826","chatId":"29211906416722104","caller":"18901881029","productAddress":"上海市浦东区福山路380号","faultAddress":"","provinceCode":"8310000"}'
+plain_text = '{"messages":"","chatId":"40202607161532231783123402","caller":"13308082347","provinceCode":"8110001","sceneName":"gshf014","content":"您好！您当前的话费余额是：438.64元，本月已消费：469.40元，目前不欠费。您的套餐：通话总计：136分钟，剩余：130分钟；国内流量总计：22.69计，剩余：20.02计，定向流量总计：27.19计，定向流量已使用：3.06计，本月消费已通过短信发送至您的手机，请及时查收。","params":"","useTags":""}'
 
 # ===================== 核心：和 Java 完全一致的分段加密 =====================
 def encrypt_by_public_key(data: bytes, public_key_str: str) -> bytes:

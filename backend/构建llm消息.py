@@ -71,6 +71,15 @@ def main(args: dict) -> dict:
 
         return text.strip()
 
+    def preserve_spoken_text(text):
+        """Keep spoken/candidate text free of phonetic or semantic rewrites.
+
+        Values returned as clean_user_input, llm_user_input, history, or a raw
+        merge must pass through this boundary. Matching helpers build derived
+        views instead of writing comparison results back into spoken text.
+        """
+        return str(text or "").strip()
+
     def _has_candidate_noise_address_evidence(text):
         text = normalize_address_marker_tokens(str(text or "").strip())
         if not text:
@@ -105,7 +114,7 @@ def main(args: dict) -> dict:
         return not _has_candidate_noise_address_evidence(text)
 
     def clean_candidate_supported_noise(text, candidates):
-        text = normalize_address_marker_tokens(str(text or "").strip())
+        text = preserve_spoken_text(text)
         if not text or not isinstance(candidates, list) or not candidates:
             return text
 
@@ -180,8 +189,9 @@ def main(args: dict) -> dict:
 
     @lru_cache(maxsize=4096)
     def normalize_text(text):
-        text = str(text or "").strip()
-        text = normalize_address_marker_tokens(text)
+        # Comparison-only representation. Never expose this value through a
+        # user-facing field: Chinese/Arabic address numbers may be normalized.
+        text = preserve_spoken_text(text)
         text = normalize_address_number_compare_tokens(text)
         text = re.sub(r"\[拼音:.*?\]", "", text)
         text = text.replace("#", "号")
@@ -276,7 +286,7 @@ def main(args: dict) -> dict:
 
         # 只用于比较归一化，不能用这个结果替换用户原话。
         text = re.sub(
-            fr"({cn_num})(?=号楼|楼|栋|幢|座|单元|室)",
+            fr"({cn_num})(?=号楼|号院|号(?!楼)|楼|栋|幢|座|单元|室|弄)",
             lambda m: _cn_number_to_arabic(m.group(1)),
             text
         )
@@ -370,14 +380,21 @@ def main(args: dict) -> dict:
         )
 
     @lru_cache(maxsize=4096)
-    def normalize_address_marker_tokens(text):
-        text = str(text or "").strip()
+    def build_structure_view(text):
+        """Return a phonetic marker view for parsing and matching only.
+
+        This view may interpret ``3好楼`` as ``3号楼``. It must never become
+        clean_user_input. Chinese number characters are protected from marker
+        conversion, so a number token such as ``三十七`` remains intact.
+        """
+        text = preserve_spoken_text(text)
         if not text:
             return ""
 
         result = []
         markers = sorted(_CANONICAL_ADDRESS_MARKERS, key=len, reverse=True)
-        prefix_pattern = r"(?:\d+|[一二三四五六七八九十百零两]+|[A-Za-z]\d*)$"
+        prefix_pattern = r"(?:\d+|[一二三四五六七八九十百千万零〇两]+|[A-Za-z]\d*)$"
+        cn_number_chars = set(_CN_ADDRESS_NUMBER_CHARS)
         i = 0
         while i < len(text):
             prefix = "".join(result)
@@ -385,8 +402,11 @@ def main(args: dict) -> dict:
                 replaced = False
                 for marker in markers:
                     fragment = text[i:i + len(marker)]
+                    is_exact_marker = fragment == marker
+                    contains_number_char = any(ch in cn_number_chars for ch in fragment)
                     if (
                         marker_phonetic_equal(fragment, marker)
+                        and (is_exact_marker or not contains_number_char)
                         and not (
                             marker in ("栋", "幢", "座", "楼")
                             and fragment != marker
@@ -405,9 +425,13 @@ def main(args: dict) -> dict:
         normalized = "".join(result)
         normalized = re.sub(r"((?<!\d)\d{3,6})栋(?=区)", r"\1东", normalized)
         return normalized
+
+    def normalize_address_marker_tokens(text):
+        """Literal boundary for values that may be returned or displayed."""
+        return preserve_spoken_text(text)
+
     def has_building_or_room(text):
-        text = str(text or "").strip()
-        text = normalize_address_marker_tokens(text)
+        text = build_structure_view(text)
         if not text:
             return False
         return bool(re.search(
@@ -416,8 +440,7 @@ def main(args: dict) -> dict:
         ))
 
     def extract_named_place_fragment(text):
-        text = str(text or "").strip()
-        text = normalize_address_marker_tokens(text)
+        text = build_structure_view(text)
         if not text:
             return ""
 
@@ -561,7 +584,7 @@ def main(args: dict) -> dict:
         text = str(text or "").strip()
         if not text:
             return False
-        text = normalize_address_marker_tokens(text)
+        text = build_structure_view(text)
         return bool(re.search(
             r"(\u7701|\u5e02|\u533a|\u53bf|\u65d7|\u9547|\u4e61|\u8857\u9053|\u5927\u9053|\u8def|\u5df7|\u80e1\u540c|\u8857|\u5c0f\u533a|\u82b1\u56ed|\u516c\u5bd3|\u5927\u53a6|\u82d1|\u6751|\u680b|\u5e62|\u5ea7|\u5355\u5143|\u5ba4|\u53f7\u697c|\u53f7\u9662|\d+\u53f7|\d{3,6})",
             text
@@ -583,7 +606,7 @@ def main(args: dict) -> dict:
         return _has_strong_address_structure(text) or _has_place_like_signal(text) or has_named_place_anchor(text)
 
     def is_room_number_fragment(text):
-        text = normalize_address_marker_tokens(str(text or "").strip())
+        text = build_structure_view(text)
         if not text:
             return False
         if text.endswith("室"):
@@ -663,47 +686,6 @@ def main(args: dict) -> dict:
 
         return best_span.strip()
 
-    def _candidate_supported_user_fragment(user_text, candidates):
-        user_text = normalize_address_marker_tokens(str(user_text or "").strip())
-        if not user_text or not isinstance(candidates, list) or not candidates:
-            return ""
-
-        raw_len = len(user_text)
-        best = None
-        for candidate in candidates:
-            candidate = normalize_address_marker_tokens(str(candidate or "").strip())
-            candidate_norm = normalize_text(candidate)
-            if not candidate_norm:
-                continue
-
-            for start in range(raw_len):
-                for end in range(start + 2, raw_len + 1):
-                    span = user_text[start:end]
-                    span_norm = normalize_text(span)
-                    if len(span_norm) < 2:
-                        continue
-                    supported = span_norm in candidate_norm or _phonetic_substring_match(span, candidate)
-                    if not supported:
-                        continue
-
-                    has_signal = _has_candidate_overlap_span_signal(span) or is_room_number_fragment(span) or has_named_place_anchor(span)
-                    if len(span_norm) < 4 and not has_signal:
-                        continue
-
-                    unsupported_prefix_norm = normalize_text(user_text[:start])
-                    unsupported_suffix_norm = normalize_text(user_text[end:])
-                    score = (
-                        len(span_norm) * 100
-                        + (30 if has_signal else 0)
-                        - len(unsupported_prefix_norm) * 3
-                        - len(unsupported_suffix_norm) * 2
-                    )
-                    item = (score, len(span_norm), start, end, span)
-                    if best is None or item > best:
-                        best = item
-
-        return best[4].strip() if best else ""
-
     def extract_by_address_structure(raw_text):
         compact_raw = re.sub(r"\s+", "", str(raw_text or "").strip())
         if not compact_raw:
@@ -759,11 +741,6 @@ def main(args: dict) -> dict:
 
         return candidate_noise_cleaned_raw, candidate_noise_cleaned_raw
 
-    def extract_spoken_address(raw_text, candidates):
-        return extract_spoken_address_parts(raw_text, candidates)[0]
-
-
-
     def _strip_leading_weak_area_fragment(text):
         text = str(text or "").strip()
         if not text:
@@ -779,19 +756,19 @@ def main(args: dict) -> dict:
         return text
 
     def _extract_building_name(text):
-        text = normalize_address_marker_tokens(str(text or "").strip())
+        text = build_structure_view(text)
         if not text:
             return ""
         match = re.search(r"((?:\d+|[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341\u767e\u96f6\u4e24]+|[A-Za-z]\d*)(?:\u680b|\u5e62|\u5ea7|\u53f7\u697c|\u697c))", text)
         return match.group(1) if match else ""
 
     def _extract_unit_name(text):
-        text = normalize_address_marker_tokens(str(text or "").strip())
+        text = build_structure_view(text)
         match = re.search(r"(\d+\u5355\u5143)", text)
         return match.group(1) if match else ""
 
     def _extract_room_name(text):
-        text = normalize_address_marker_tokens(str(text or "").strip())
+        text = build_structure_view(text)
         if not text:
             return ""
         match = re.search(r"(\d+\u5ba4)", text)
@@ -803,8 +780,13 @@ def main(args: dict) -> dict:
         return nums[-1] if nums else ""
 
     def _extract_house_name(text):
-        text = normalize_address_marker_tokens(str(text or "").strip())
-        match = re.search(r"(\d+\u53f7\u9662|\d+\u53f7(?!\u697c|\u680b|\u5e62|\u5355\u5143|\u5ba4)|\d+\u5f04|\d+\u91cc)", text)
+        text = build_structure_view(text)
+        cn_num = rf"[{_CN_ADDRESS_NUMBER_CHARS}]+"
+        number = rf"(?:\d+|{cn_num})"
+        match = re.search(
+            fr"({number}\u53f7\u9662|{number}\u53f7(?!\u697c|\u680b|\u5e62|\u5355\u5143|\u5ba4)|{number}\u5f04|\d+\u91cc)",
+            text,
+        )
         return match.group(1) if match else ""
 
     def _normalized_detail_value(value):
@@ -835,14 +817,51 @@ def main(args: dict) -> dict:
 
     @lru_cache(maxsize=8192)
     def _find_phonetic_span_match(fragment, candidate):
+        fragment = preserve_spoken_text(fragment)
+        candidate = preserve_spoken_text(candidate)
         fragment_norm = normalize_text(fragment)
-        candidate_norm = normalize_text(candidate)
-        if not fragment_norm or not candidate_norm or len(fragment_norm) > len(candidate_norm):
+        if not fragment_norm or not candidate:
             return "", -1, -1
-        for start in range(len(candidate_norm) - len(fragment_norm) + 1):
-            span = candidate_norm[start:start + len(fragment_norm)]
-            if all(chars_phonetic_equal(a, b) for a, b in zip(fragment_norm, span)):
-                return span, start, start + len(fragment_norm)
+
+        # Prefer a literal candidate slice. Comparison normalization is allowed
+        # to collapse tokens such as 号楼 -> 楼, but returned text must always
+        # come from the original candidate rather than from that derived view.
+        literal_start = candidate.find(fragment)
+        if literal_start >= 0:
+            return fragment, literal_start, literal_start + len(fragment)
+
+        best = None
+        for start in range(len(candidate)):
+            for end in range(start + 1, len(candidate) + 1):
+                candidate_span = candidate[start:end]
+                candidate_span_norm = normalize_text(candidate_span)
+                if not candidate_span_norm:
+                    continue
+
+                is_equal = candidate_span_norm == fragment_norm
+                is_phonetic_equal = (
+                    len(candidate_span_norm) == len(fragment_norm)
+                    and all(
+                        chars_phonetic_equal(left, right)
+                        for left, right in zip(fragment_norm, candidate_span_norm)
+                    )
+                )
+                if not (is_equal or is_phonetic_equal):
+                    continue
+
+                score = (
+                    1 if is_equal else 0,
+                    -abs(len(candidate_span) - len(fragment)),
+                    -len(candidate_span),
+                    -start,
+                )
+                item = (score, candidate_span, start, end)
+                if best is None or item[0] > best[0]:
+                    best = item
+
+        if best:
+            _score, span, start, end = best
+            return span, start, end
         return "", -1, -1
 
     def _find_phonetic_span(fragment, candidate):
@@ -865,30 +884,28 @@ def main(args: dict) -> dict:
                 return f"{text[:start]}{new}{text[start + len(old):]}"
         return text
 
+    def _can_apply_candidate_correction(value, candidate_span):
+        """Allow only same-scope spelling correction in a returned merge.
+
+        Chinese/Arabic number normalization remains comparison-only. Changing
+        一百楼 to 100号楼 here would erase what the user actually said and is
+        left to matched_address_fragment after candidate confirmation.
+        """
+        value = preserve_spoken_text(value)
+        candidate_span = preserve_spoken_text(candidate_span)
+        if not value or not candidate_span or len(value) != len(candidate_span):
+            return False
+        converts_chinese_number = (
+            any(ch in _CN_ADDRESS_NUMBER_CHARS for ch in value)
+            and any(ch.isdigit() for ch in candidate_span)
+        )
+        return not converts_chinese_number
+
     def _add_match_term(terms, value, min_len=2):
         value = normalize_address_marker_tokens(str(value or "").strip())
         norm = normalize_text(value)
         if len(norm) >= min_len and norm not in {item[1] for item in terms}:
             terms.append((value, norm))
-
-    def _is_detail_match_term(value):
-        value_norm = normalize_text(value)
-        if not value_norm:
-            return False
-        for extractor in (_extract_building_name, _extract_unit_name, _extract_room_name, _extract_house_name):
-            extracted = extractor(value)
-            if extracted and normalize_text(extracted) == value_norm:
-                return True
-        value = normalize_address_marker_tokens(str(value or "").strip())
-        cn_num = r"[一二两三四五六七八九十百千万零〇]+"
-        num = fr"(?:\d+|{cn_num}|[A-Za-z]\d*)"
-        stripped = value
-        stripped = re.sub(fr"{num}(?:栋|幢|座|号楼|楼)", "", stripped)
-        stripped = re.sub(fr"(?:\d+|{cn_num})单元", "", stripped)
-        stripped = re.sub(fr"(?:\d+|{cn_num})室", "", stripped)
-        stripped = re.sub(r"\d+号院|\d+号(?!楼|栋|幢|单元|室)|\d+弄|\d+里", "", stripped)
-        stripped = re.sub(fr"(?<![A-Za-z0-9一二两三四五六七八九十百千万零〇])(?:\d{{3,6}}|{cn_num})(?![A-Za-z0-9一二两三四五六七八九十百千万零〇])", "", stripped)
-        return value != stripped and not normalize_text(stripped)
 
     def _extract_candidate_backed_terms(text):
         text = normalize_address_marker_tokens(str(text or "").strip())
@@ -1013,7 +1030,8 @@ def main(args: dict) -> dict:
         overlap_len = _suffix_prefix_overlap_len(prev_norm, curr_norm)
         if overlap_len:
             return f"{prev_text}{curr_text[overlap_len:]}"
-        return f"{prev_text}{curr_text}"
+        joinable_prev = prev_text.rstrip(":：,，")
+        return f"{joinable_prev}{curr_text}"
 
     def _suffix_prefix_overlap_len(prev_norm, curr_norm):
         max_overlap = min(len(prev_norm), len(curr_norm))
@@ -1052,6 +1070,8 @@ def main(args: dict) -> dict:
             candidate = str(candidate or "").strip()
             if not candidate:
                 continue
+            if _has_precise_detail_conflict(combined, candidate):
+                continue
             spans = []
             for item in required_terms:
                 span, start, end = _find_phonetic_span_match(item["value"], candidate)
@@ -1072,7 +1092,7 @@ def main(args: dict) -> dict:
 
             corrected = combined
             for value, span, _start, _end, _sources in sorted(spans, key=lambda item: len(normalize_text(item[0])), reverse=True):
-                if not _is_detail_match_term(value):
+                if _can_apply_candidate_correction(value, span):
                     corrected = _replace_first_phonetic(corrected, value, span)
             results.append(corrected)
 
@@ -1111,92 +1131,6 @@ def main(args: dict) -> dict:
                 continue
             return False
         return True
-
-    def _find_ordered_candidate_term_window(terms, candidate):
-        candidate_norm = normalize_text(candidate)
-        if not terms or not candidate_norm:
-            return None
-
-        spans = []
-        search_start = 0
-        for value, norm in terms:
-            if not norm:
-                continue
-            found = None
-            if len(norm) > len(candidate_norm):
-                return None
-            for start in range(search_start, len(candidate_norm) - len(norm) + 1):
-                candidate_span = candidate_norm[start:start + len(norm)]
-                if all(chars_phonetic_equal(a, b) for a, b in zip(norm, candidate_span)):
-                    found = (value, candidate_span, start, start + len(norm))
-                    break
-            if not found:
-                return None
-            spans.append(found)
-            search_start = found[3]
-
-        if not spans:
-            return None
-        return spans[0][2], spans[-1][3], spans
-
-    def _extend_detail_window_end(candidate_norm, window_end):
-        while window_end < len(candidate_norm) and candidate_norm[window_end] in "号室":
-            window_end += 1
-        return window_end
-
-    def _build_ordered_candidate_anchor_span_hint(user_scope, candidates):
-        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
-        if not user_scope or not isinstance(candidates, list) or not candidates:
-            return ""
-
-        terms = _extract_candidate_backed_terms(user_scope)
-        if len(terms) < 2:
-            return ""
-
-        matched_windows = []
-        for idx, candidate in enumerate(candidates):
-            candidate_text = normalize_address_marker_tokens(str(candidate or "").strip())
-            candidate_norm = normalize_text(candidate_text)
-            window = _find_ordered_candidate_term_window(terms, candidate_text)
-            if not window:
-                continue
-            window_start, window_end, spans = window
-            window_end = _extend_detail_window_end(candidate_norm, window_end)
-            if window_start < 0 or window_end <= window_start:
-                continue
-            standard_fragment = candidate_norm[window_start:window_end]
-            matched_windows.append((idx, standard_fragment, spans))
-
-        if len(matched_windows) != 1:
-            return ""
-
-        matched_idx, standard_fragment, spans = matched_windows[0]
-        anchor_text = "、".join(dict.fromkeys(value for value, _span, _start, _end in spans))
-        return (
-            f"当前 clean_user_input 的关键地址锚点“{anchor_text}”按顺序落在第 {matched_idx} 条候选中；"
-            f"matched_address_fragment 可使用候选从第一个锚点到最后一个锚点之间的连续标准片段“{standard_fragment}”，"
-            "允许补全锚点之间省略的同一层级或 L7 结构成分（如单元/号/室），"
-            "但禁止补入该窗口外的省/市/区/街道/路名/小区/主体等候选独有内容。"
-        )
-
-    def _build_no_candidate_anchor_hint(user_scope, candidates):
-        user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
-        if not user_scope or not isinstance(candidates, list) or not candidates:
-            return ""
-
-        terms = _extract_candidate_backed_terms(user_scope)
-        for candidate in candidates:
-            candidate_text = str(candidate or "").strip()
-            if _candidate_supports_user_scope(user_scope, candidate_text):
-                return ""
-            if terms and _find_ordered_candidate_term_window(terms, candidate_text):
-                return ""
-
-        return (
-            f"当前 clean_user_input“{user_scope}”没有任何可锚定到 candidates_info 的地址成分；"
-            "不能把它写入 matched_address_fragment，也不能仅凭拼音把不同音节纠正为候选地址。"
-            "若没有上一轮已被候选支持的片段，matched_address_fragment 必须为 \"\"。"
-        )
 
     def _build_ambiguous_candidate_hint(user_scope, candidates):
         user_scope = normalize_address_marker_tokens(str(user_scope or "").strip())
@@ -1508,10 +1442,12 @@ def main(args: dict) -> dict:
 
         return curr_text
 
+    # Stage 1: normalize the input envelope, never the spoken address spelling.
     kd_records = args.get("addList") or args.get("kdRecords") or []
     if not isinstance(kd_records, list):
         kd_records = []
 
+    # Stage 2: isolate the user-spoken address while preserving its characters.
     raw_clean_input = clean_prefix(user_input)
     clean_input, candidate_noise_clean_input = extract_spoken_address_parts(user_input, kd_records)
     last_unmatched_address = strip_embedded_reason_field(strip_non_merge_history(last_unmatched_address_raw))
@@ -1521,6 +1457,8 @@ def main(args: dict) -> dict:
     can_merge_with_previous = bool(merge_base_address) and not is_non_merge_history(last_unmatched_address_raw)
     candidate_merge_base_address = last_unmatched_fragment or merge_base_address
 
+    # Stage 3: derive conversation scopes. Candidate-backed correction is
+    # allowed here, but clean_input remains the immutable current-turn value.
     effective_merged_input = merge_with_previous_address(merge_base_address if can_merge_with_previous else "", clean_input)
     possible_merged_input = merge_with_previous_address(candidate_merge_base_address if can_merge_with_previous else "", clean_input)
 
@@ -1546,6 +1484,7 @@ def main(args: dict) -> dict:
     is_address_correction = bool(clean_input) and clean_input != raw_clean_input and not is_candidate_noise_cleaning
     prompt_state = "matching" if state == "completed" and is_address_correction else state
 
+    # Stage 4: serialize state and candidates for the LLM.
     context_parts = [f"[Context] state={prompt_state}"]
     try:
         matched_index_int = int(matched_index)
@@ -1623,14 +1562,12 @@ def main(args: dict) -> dict:
     if display_scope:
         context_text += (
             f"\n[Display Constraint] If reply starts with the recorded-address prefix, "
-            f"the recorded address must be limited to candidate-supported user-spoken scope from clean_user_input: {display_scope}, "
+            f"the recorded address must only use clean_user_input: {display_scope}, "
             "unless the model first judges clean_user_input is a supplement to "
             "last_matched_address_fragment/last_unmatched_address; in that supplement case, "
             "the recorded address may use the combined user-spoken scope made only from those fields. "
-            "Use candidates_info only for matching, same-scope homophone correction, ordered address-anchor completion, and missing-level judgment. "
-            "If multiple spoken anchors map in order to one candidate, the recorded fragment may use the candidate standard text between the first and last anchor, "
-            "but must not add candidate-only province/city/district/town/road/community or any text outside that anchored span. "
-            "If clean_user_input has no candidate-backed anchor, do not record it as matched_address_fragment. "
+            "Use candidates_info only for matching, same-scope homophone correction, and missing-level judgment. "
+            "Do not add or append candidate-only province/city/district/town/road/community/building/unit/room text into reply. "
             "A correction may only replace an already-spoken span with similar-length same-scope text. "
             "Pinyin correction is limited to identical pronunciation, polyphone pronunciation overlap, "
             "zh/z, ch/c, sh/s initials, and front/back nasal finals; different syllables must not be corrected."
@@ -1644,20 +1581,6 @@ def main(args: dict) -> dict:
     )
     if phonetic_mismatch_hint:
         context_text += f"\n[System Hint] {phonetic_mismatch_hint}"
-
-    ordered_anchor_span_hint = _build_ordered_candidate_anchor_span_hint(
-        display_scope,
-        clean_candidate_records,
-    )
-    if ordered_anchor_span_hint:
-        context_text += f"\n[System Hint] {ordered_anchor_span_hint}"
-
-    no_candidate_anchor_hint = _build_no_candidate_anchor_hint(
-        display_scope,
-        clean_candidate_records,
-    )
-    if no_candidate_anchor_hint:
-        context_text += f"\n[System Hint] {no_candidate_anchor_hint}"
 
     previous_context_fragment = last_unmatched_fragment or last_unmatched_address
     if clean_input and previous_context_fragment:
@@ -1740,6 +1663,7 @@ def main(args: dict) -> dict:
     if is_address_correction:
         context_text += f"\n[System Hint] 用户正在纠正上一条地址，本轮有效地址片段更可能是: {clean_input}。如当前状态不是matching，请按新的匹配请求处理。"
 
+    # Stage 5: attach phonetic evidence as hints, never as rewritten user text.
     pinyin_source_input = clean_input
     if has_pinyin and pinyin_source_input:
         t1 = re.sub(r"[^\w\u4e00-\u9fff]+", "", pinyin_source_input)
@@ -1790,6 +1714,7 @@ def main(args: dict) -> dict:
     if semantic_hints:
         context_text += f"\n[System Hint] {' '.join(semantic_hints)}"
 
+    # Stage 6: emit the stable public contract.
     effective_user_input = clean_input
     combined = f"{context_text}\nUser: {effective_user_input}" if effective_user_input else context_text
 

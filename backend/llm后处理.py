@@ -118,6 +118,10 @@ def main(
         matched_address_fragment=matched_address_fragment,
         last_unmatched_fragment=previous_fragment,
         previous_count=previous_count,
+        reset_count=(
+            current_state == "confirming"
+            and _is_confirming_denial(current_input)
+        ),
     )
     if should_fail:
         return _build_return(
@@ -132,7 +136,7 @@ def main(
             ai_context_reply=FAIL_REPLY,
             next_last_unmatched_address="",
             next_last_unmatched_fragment="",
-            next_similar_no_match_count=next_similar_no_match_count,
+            next_similar_no_match_count=0,
         )
 
     # Step 3: reply 给用户看，ai_context_reply 给大模型看，两者的地址来源必须分开。
@@ -312,14 +316,20 @@ def _calculate_repeat_failure(
     matched_address_fragment: str,
     last_unmatched_fragment: str,
     previous_count: int,
+    reset_count: bool = False,
 ) -> tuple[int, bool]:
+    if reset_count:
+        return 0, False
     if reason == "true":
         return 0, False
 
+    base_count = 0 if previous_count >= SIMILAR_NO_MATCH_FAIL_THRESHOLD else previous_count
     current_norm = _normalize_text(matched_address_fragment)
     previous_norm = _normalize_text(last_unmatched_fragment)
-    if current_norm and previous_norm and current_norm == previous_norm:
-        next_count = previous_count + 1
+    if not current_norm and not previous_norm:
+        next_count = base_count + 1
+    elif current_norm and previous_norm and current_norm == previous_norm:
+        next_count = base_count + 1
     else:
         next_count = 0
 
@@ -905,6 +915,11 @@ def _is_confirming_affirmation(text: str) -> bool:
         "行",
         "没问题",
     }
+
+
+def _is_confirming_denial(text: str) -> bool:
+    text = re.sub(r"[^\u4e00-\u9fa5A-Za-z0-9]", "", _to_str(text)).lower()
+    return bool(text and re.search(r"(不是|不对|不正确|不准确|错了|错误|否)", text))
 
 
 def _strip_embedded_reason_field(text: str) -> str:
