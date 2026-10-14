@@ -1,13 +1,16 @@
 ﻿import { useMemo, useState } from 'react'
 import { CyberModulePage } from '../components/layout/CyberModulePage'
-import { setApiBaseUrl } from '../lib/apiClient'
+import {
+  getApiBaseUrl,
+  getDefaultApiBaseUrl,
+  resetApiBaseUrl,
+  setApiBaseUrl,
+} from '../lib/apiClient'
 import { useToast } from '../components/status/toast'
 
 export function SettingsPage() {
   const toast = useToast()
-  const [baseUrl, setBaseUrlState] = useState(
-    () => localStorage.getItem('rag.apiBaseUrl') || 'http://localhost:8000',
-  )
+  const [baseUrl, setBaseUrlState] = useState(getApiBaseUrl)
 
   const normalized = useMemo(() => baseUrl.trim().replace(/\/+$/, ''), [baseUrl])
 
@@ -24,7 +27,7 @@ export function SettingsPage() {
               className="mt-1.5 w-full rounded-lg border border-[#2f476f] bg-[#050a13] px-3 py-2.5 text-sm text-[#e8eeff] outline-none transition placeholder:text-[#617392] focus:border-cyan-300/65 focus:ring-2 focus:ring-cyan-300/25"
               value={baseUrl}
               onChange={(e) => setBaseUrlState(e.target.value)}
-              placeholder="例如 http://localhost:8000"
+              placeholder={getDefaultApiBaseUrl() || '请输入后端地址'}
             />
           </label>
           <button
@@ -37,6 +40,21 @@ export function SettingsPage() {
           >
             保存
           </button>
+          <button
+            className="ml-3 inline-flex items-center justify-center rounded-lg border border-[#2f476f] px-4 py-2 text-sm font-semibold text-[#c9d6ef] transition hover:border-cyan-300/65 hover:text-cyan-100"
+            onClick={() => {
+              resetApiBaseUrl()
+              const defaultBaseUrl = getApiBaseUrl()
+              setBaseUrlState(defaultBaseUrl)
+              toast.push({
+                kind: 'success',
+                title: '已恢复默认',
+                message: defaultBaseUrl || '请先配置默认后端地址。',
+              })
+            }}
+          >
+            恢复默认
+          </button>
         </div>
       }
       right={
@@ -46,7 +64,7 @@ export function SettingsPage() {
             <div className="font-medium text-cyan-100">当前生效的 Base URL</div>
             <div className="mt-2 font-mono text-xs">{normalized || '（未设置）'}</div>
             <div className="mt-2 text-xs text-[#9eb2d3]">
-              说明：所有 `apiFetch()` 默认使用此地址；页面内加载与错误提示由统一 Hook 管理。
+              默认地址来自环境配置，保存的自定义地址优先使用；点击「恢复默认」可清除自定义地址。
             </div>
           </div>
         </div>

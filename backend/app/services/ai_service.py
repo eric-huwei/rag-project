@@ -27,8 +27,19 @@ class AIService:
             raise ValueError("callId is required")
         if not clean_content:
             raise ValueError("content is required")
-        if not settings.aliai_api_key:
-            raise RuntimeError("ALIAI_API_KEY is not configured")
+        missing_settings = [
+            name
+            for name, value in (
+                ("AI_API_KEY", settings.ai_api_key),
+                ("AI_BASE_URL", settings.ai_base_url),
+                ("AI_MODEL", settings.ai_model),
+            )
+            if not value
+        ]
+        if missing_settings:
+            raise RuntimeError(
+                f"请在 backend/.env 中配置：{', '.join(missing_settings)}"
+            )
 
         self.save_content(call_id=clean_call_id, content=clean_content)
 
@@ -47,11 +58,11 @@ class AIService:
             raise RuntimeError("openai package is not installed") from exc
 
         client = OpenAI(
-            api_key=settings.aliai_api_key,
-            base_url=settings.aliai_base_url,
+            api_key=settings.ai_api_key,
+            base_url=settings.ai_base_url,
         )
         return client.chat.completions.create(
-            model=settings.aliai_model,
+            model=settings.ai_model,
             messages=[{"role": "user", "content": content}],
         )
 

@@ -12,13 +12,21 @@ export class ApiError extends Error {
 
 const BASE_URL_STORAGE_KEY = 'rag.apiBaseUrl'
 
+export function getDefaultApiBaseUrl() {
+  return (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/+$/, '')
+}
+
 export function getApiBaseUrl() {
   const v = localStorage.getItem(BASE_URL_STORAGE_KEY)?.trim()
-  return v && v.length > 0 ? v.replace(/\/+$/, '') : 'http://localhost:8000'
+  return v && v.length > 0 ? v.replace(/\/+$/, '') : getDefaultApiBaseUrl()
 }
 
 export function setApiBaseUrl(url: string) {
   localStorage.setItem(BASE_URL_STORAGE_KEY, url.trim())
+}
+
+export function resetApiBaseUrl() {
+  localStorage.removeItem(BASE_URL_STORAGE_KEY)
 }
 
 async function readJsonSafely(res: Response) {
@@ -36,6 +44,9 @@ export async function apiFetch<T>(
   init?: RequestInit & { baseUrl?: string },
 ): Promise<T> {
   const baseUrl = init?.baseUrl ? init.baseUrl.replace(/\/+$/, '') : getApiBaseUrl()
+  if (!baseUrl) {
+    throw new Error('请先在设置页面配置后端地址。')
+  }
   const url = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`
 
   const isFormData =
